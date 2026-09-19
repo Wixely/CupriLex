@@ -1,0 +1,10 @@
+# The corpus is somebody else's work, fetched on demand. See tools/fetch-corpus.py.
+corpus/
+
+# Build output
+bin/
+obj/
+*.user
+
+# Conformance runs are per-machine until they are promoted into support/
+conformance/out/

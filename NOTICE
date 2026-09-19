@@ -1,0 +1,23 @@
+CupriLex
+Copyright (c) 2026 Wixely
+
+This product is licensed under the MIT License (see LICENSE).
+
+--------------------------------------------------------------------------------
+HyperFrames
+
+CupriLex translates compositions written for HyperFrames, and its test corpus is
+the HyperFrames registry:
+
+    https://github.com/heygen-com/hyperframes
+    Copyright HeyGen
+    Licensed under the Apache License, Version 2.0
+    http://www.apache.org/licenses/LICENSE-2.0
+
+The corpus is NOT redistributed in this repository. tools/fetch-corpus.py pulls
+it on demand into corpus/, which is git-ignored.
+
+A composition translated by this tool should record which block it came from -
+not because the Apache licence requires a notice in a rendered video, but
+because a project that cannot say where its design came from is one nobody can
+re-license later.

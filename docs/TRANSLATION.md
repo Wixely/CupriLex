@@ -45,8 +45,9 @@ Four constraints from the engine make this harder than it sounds, and all four a
    applies per-animation. Either approximate with denser stops or refuse.
 
 Constraint 1 and constraint 4 interact badly and that is the real difficulty of this compiler.
-Dense stops sampled from the eased curve is the likely answer; it should be *measured* against the
-browser original rather than assumed adequate.
+**Settled:** the curve is evaluated in the compiler and sampled into stops, and the animation
+itself runs `linear`. Eight stops per eased tween, which is a round number and not yet a measured
+one — the comparison harness is what should decide it. See [COMPILER.md](COMPILER.md).
 
 ### Everything else
 
@@ -57,6 +58,57 @@ browser original rather than assumed adequate.
 | animated `left` / `top` | `transform: translate()` | accepted, runs, changes nothing |
 | external font `@import` / `<link>` | download, embed as `@font-face` with a `data:` URI | 23% of blocks. Keeps the result one self-contained file. |
 | `<script src=...gsap...>` | removed | consumed by the compiler, not carried |
+| `<template>` holding the composition | its content, inlined | **13 blocks** — every `code-snippet-*`. Template content is inert, so the block is a blank page until a host clones it in. |
+| `rgba(r, g, b, a)` anywhere | `#rrggbbaa` | **35 blocks** — the parenthesised form *crashes* CupriFace 0.26.1 from three different parsers. See below. |
+| `inset: 0` | `top:0; left:0; width:100%; height:100%` | **115 blocks** — ignored by the engine, so the overlay has no size. The four longhands were measured and do not work. |
+| relative asset paths | absolute, then embedded as bytes | the engine is handed a string, which has no document location to resolve against |
+
+### The four the comparison harness found
+
+None of these came from reading a spec. They came from running [the harness](HARNESS.md) over the
+corpus and looking at what could not be scored - and two of them were fixed twice, because the
+first fix was the obvious one and the corpus said it was not enough.
+
+**`<template>`, at 13 blocks.** The whole composition — markup, styles and scripts — sits inside a
+`<template>`, which renders nothing anywhere until something clones it into the document. The
+translator has to inline that content, and it has to do it in an order that preserves scripts'
+dependencies, because appending the fragment whole runs an inline script before the external one
+above it has arrived.
+
+**An `rgb()` colour, at 35 blocks.** `rgba(198, 173, 144, 0.32)` throws
+`ArgumentOutOfRangeException: length ('-6')` out of `Colors.TryParse`, which takes the text between
+the parentheses and finds no closing one. **These blocks cannot be loaded at all**, so they are
+unmeasurable rather than badly scored.
+
+Three parsers hand it a broken fragment, and each had to be found separately:
+
+| caller | how | fixed by unspacing? |
+|---|---|---|
+| the `border` shorthand | splits the value on spaces, so `rgba(198,` arrives alone | yes |
+| `ParseGradient` | takes everything between the value's first `(` and last `)`, so a multi-layer `background: radial-gradient(…), rgba(…)` no longer balances | yes |
+| `ParseFilterOps` | matches functions with a regex that stops at the first `)`, so `drop-shadow(0 0 4px rgba(0,0,0,.5))` loses the colour's tail | **no** |
+
+The first version of the rewrite took the spaces out of colours inside `border` declarations. It
+recovered 25 blocks and left 10, which is what a corpus run is for. A hex colour has no
+parentheses for any of the three to break on.
+
+> `rule: rgb()/rgba() -> hex   because  the parenthesised form throws, CupriFace 0.26.1`
+
+That condition is pinned by `EngineBugTests`, which is meant to fail when the engine is fixed —
+and then the rewrite should be deleted, because a rewrite that is no longer needed is output that
+differs from what the author wrote for no reason.
+
+**`inset: 0`, at 115 blocks of 187.** The engine reports `CF0050` and lays the element out with no
+size at all, so the overlay, the backdrop and the end card that were meant to cover the composition
+cover nothing. The obvious expansion — the four longhands — was written first and then measured,
+and it does *not* work: the engine accepts `top/right/bottom/left` and still gives the element no
+size. A percentage width and height does. That measurement is the only reason the rule is right,
+and it is the clearest case in this repository of why the answer has to come from the binary.
+
+**The host contract, at 25 blocks.** `window.__timelines[id] = tl` written into an object the
+block expects its host to have made. It matters to the compiler as well as the harness: that
+assignment is where a block's timeline is *named*, and the name is what a translated composition
+should keep.
 
 ---
 

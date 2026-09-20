@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CupriLex.Harness.Tests</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      Run these by running the project, not with "dotnet test". See README.md for the command.
+      xunit v3 is a self-hosting test executable on Microsoft.Testing.Platform, and the .NET 10
+      SDK on this machine (10.0.302) still routes "dotnet test" down the VSTest path and refuses
+      before discovering anything, with both documented opt-ins in place: the dotnet.config at
+      the repository root and this property. Left here so the next person does not spend the same
+      half hour on it.
+    -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      xunit v3, not v2 as the sibling repository uses, for one reason: Assert.Skip. Several of
+      these tests need a corpus that is deliberately not vendored, or a browser, or the network.
+      Under v2 the choice was a red test on a clean checkout or a test that passes without
+      measuring anything, and the second is worse.
+    -->
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\harness\CupriLex.Harness.csproj" />
+  </ItemGroup>
+
+</Project>

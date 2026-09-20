@@ -59,10 +59,26 @@ public static class Probe
                 $"'{probe.Property}' ({probe.Value}): the two documents are identical, so this case "
                 + "can never detect anything. Make With and Without actually differ.");
 
-        var findings = Diagnose(with, probe.Property);
+        var findings = Diagnose(with, probe.Property).ToList();
 
-        var a = Render(with, probe.At);
-        var b = Render(without, probe.At);
+        var (a, failed) = Render(with, probe.At);
+        var (b, controlFailed) = Render(without, probe.At);
+
+        if (controlFailed is not null)
+            throw new InvalidOperationException(
+                $"'{probe.Property}' ({probe.Value}): the CONTROL failed to render ({controlFailed}), "
+                + "so no difference could be attributed to the property.");
+
+        // The third guard, and it was reporting the exact opposite of the truth. A document the
+        // engine THROWS on used to render as null, null differs from the control's pixels, and
+        // the matrix said the property painted. `border: 8px solid rgba(217, 100, 42, 1)` crashes
+        // CupriFace 0.26.1 outright and was recorded here as "yes, paints" - a silent wrong answer
+        // in the one file whose whole job is to not have any.
+        if (failed is not null)
+        {
+            findings.Add("threw while rendering: " + failed);
+            return new Support(probe.Property, probe.Value, findings.Count == 0, false, null, findings);
+        }
 
         // The second guard, and the one that caught the real mistake. Bare declarations were
         // being dropped into the stylesheet with no selector, so nothing was styled, both
@@ -83,7 +99,9 @@ public static class Probe
         if (probe.Animation is { } animation)
         {
             var moving = Document(probe.Without with { Css = probe.Without.Css + animation.Css });
-            animates = !SamePixels(Render(moving, 0), Render(moving, animation.Seconds));
+            var (start, startFailed) = Render(moving, 0);
+            var (end, endFailed) = Render(moving, animation.Seconds);
+            animates = startFailed is null && endFailed is null && !SamePixels(start, end);
         }
 
         return new Support(probe.Property, probe.Value, findings.Count == 0, paints, animates, findings);
@@ -111,7 +129,11 @@ public static class Probe
         }
     }
 
-    private static byte[]? Render(string html, double t)
+    /// <summary>The pixels, or the reason there are none. The reason is returned rather than
+    /// swallowed: a document the engine throws on is a different answer from one that renders and
+    /// shows nothing, and collapsing the two is how this matrix came to record a declaration that
+    /// crashes the engine as painting.</summary>
+    private static (byte[]? Pixels, string? Failed) Render(string html, double t)
     {
         try
         {
@@ -130,12 +152,13 @@ public static class Probe
 
             using var image = doc.RenderToImage(Width, Height);
             using var bitmap = SKBitmap.FromImage(image);
-            return bitmap.GetPixelSpan().ToArray();
+            return (bitmap.GetPixelSpan().ToArray(), null);
         }
-        catch
+        catch (Exception ex)
         {
-            // A document the engine refuses outright is a real answer: it did not paint.
-            return null;
+            // A document the engine refuses outright is a real answer, and the strongest kind of
+            // no. It is returned rather than swallowed so the matrix can say which exception.
+            return (null, $"{ex.GetType().Name}: {ex.Message.Split('\n')[0].Trim()}");
         }
     }
 

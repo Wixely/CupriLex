@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CupriLex.Compiler</RootNamespace>
+    <AssemblyName>CupriLex.Compiler</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      A real JavaScript parser, and NO JavaScript engine. The distinction is the whole design:
+      every tween is read out of the syntax tree and resolved by arithmetic, because a block that
+      cannot be resolved must be refused rather than approximated, and an engine would happily
+      approximate. Acornima is the maintained successor to Esprima.NET and is what Jint parses
+      with, so it tracks the language rather than a snapshot of it.
+
+      AngleSharp finds the inline scripts, pinned to the version CupriFace already resolves, so a
+      document is read by one HTML parser on both sides of the comparison.
+    -->
+    <PackageReference Include="Acornima" Version="1.8.0" />
+    <PackageReference Include="AngleSharp" Version="1.7.0" />
+  </ItemGroup>
+
+</Project>

@@ -8,3 +8,7 @@ obj/
 
 # Conformance runs are per-machine until they are promoted into support/
 conformance/out/
+
+# Comparison runs: gigabytes of frames, and a score that is only meaningful beside the engine
+# version and machine that produced it. Quote baseline.json in a commit message, do not commit it.
+harness/out/

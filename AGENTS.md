@@ -62,7 +62,7 @@ would otherwise learn the hard way.
 
 ---
 
-## The two mechanisms this repository is built around
+## The three mechanisms this repository is built around
 
 ### 1. The corpus — `tools/`, `corpus/`
 
@@ -86,6 +86,43 @@ matrices and you have the list of things to reconsider. See
 changed — `line-height` went from broken to correct, comments inside `@keyframes` stopped
 corrupting them, a diagnostics bug was fixed, and a *new* false-positive check appeared. Three
 documents in the sibling repository were quietly wrong until someone re-measured.
+
+### 3. The comparison harness — `harness/`
+
+The instrument the project is steered by: a headless browser renders a block seeked to exact
+instants, CupriFace renders the same instants, and the frames are compared. One number per block
+and the triptych that explains it. See [docs/HARNESS.md](docs/HARNESS.md).
+
+```
+dotnet run --project harness -- <block>      # one block
+dotnet run --project harness -- --all        # the corpus, and a baseline.json
+dotnet run --project harness -- --report harness/out/baseline.json
+```
+
+**Quote the second number, not the first.** The corpus mean flatters a composition that leaves
+most of the frame flat — one block renders as an empty rectangle in the engine and scores 99.4% on
+mean error — so the harness reports the share of *visibly differing* pixels, the movement in each
+renderer's own frames, and the mean over only those blocks whose reference actually moves. A block
+that could not be rendered at all is reported **unmeasured, by name**, never as a zero: a zero
+averages into the corpus number as though it were a measurement.
+
+---
+
+### The compiler has its own two instruments — `compiler/`
+
+```
+dotnet run --project compiler -- shapes     # what the corpus WRITES, from syntax trees
+dotnet run --project compiler -- reach      # how much of it the compiler carries, and why not
+```
+
+`shapes` is the one to run before changing the compiler's scope. It classifies the arguments of
+every GSAP call rather than counting the calls, and it is what established that only 39% of motion
+calls are straight-line code — the number that decided the compiler would need constant folding
+and binding resolution rather than a bigger switch statement.
+
+`reach` groups every refusal by cause **with examples quoted from the source**. A count says how
+big a problem is; the quoted expression says what to do about it. Neither is a score: frames
+decide the score.
 
 ---
 

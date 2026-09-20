@@ -1,0 +1,459 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace CupriLex.Harness;
+
+/// <summary>How one sample time came out.</summary>
+public sealed record Sample(double Time, double Similarity, double Differing);
+
+/// <summary>One block's score, and enough beside it to know whether to believe the score.</summary>
+/// <param name="Matching">The headline: the share of pixels that are not visibly different, mean
+/// over the samples.</param>
+/// <param name="Similarity">Mean absolute error, as a fraction. Reported second because it is far
+/// too kind: <c>carousel-circle-1</c> renders as an empty grey rectangle in the engine - not one
+/// of its cards appears - and scores 99.4% here, because white cards on light grey are a small
+/// per-pixel difference over a tenth of the frame. Both numbers are generous to a mostly-empty
+/// composition, which is what the diff image and <see cref="ReferenceMoves"/> are for.</param>
+/// <param name="Worst">The worst sample, by matching. Usually the end of a composition, where the
+/// browser has finished animating and the engine has not started.</param>
+/// <param name="ReferenceMoves">How much the browser's own frames differ from its first one. The
+/// calibration that makes the rest readable: a block whose reference barely moves cannot be
+/// evidence that motion was carried, however well it scores.</param>
+/// <param name="EngineMoves">The same for the engine's frames. Zero means the engine rendered the
+/// same image at every time - no motion at all, which is the expected baseline before the
+/// compiler.</param>
+/// <param name="Failure">Set when there is no score: no reference, or a document the engine
+/// refused. Never scored as zero - unmeasured is not the same as wrong.</param>
+public sealed record Score(
+    string Block,
+    int Width,
+    int Height,
+    double Duration,
+    string DurationSource,
+    double TimelineSeconds,
+    double Matching,
+    double Similarity,
+    double Worst,
+    double ReferenceMoves,
+    double EngineMoves,
+    double Seconds,
+    IReadOnlyList<Sample> Samples,
+    IReadOnlyList<string> Refusals,
+    IReadOnlyList<string> Diagnostics,
+    string? Failure);
+
+/// <summary>
+/// The instrument this project is steered by: how close the engine's frames are to a browser's,
+/// for one block or for all of them.
+///
+///     dotnet run --project harness -- bar-chart-race
+///     dotnet run --project harness -- --all --out harness/out
+///
+/// <para>Progress is this number and nothing else - not how many rewrite rules exist, not how many
+/// blocks parse without an error. See docs/HARNESS.md.</para>
+/// </summary>
+public static class Program
+{
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public static async Task<int> Main(string[] args)
+    {
+        try
+        {
+            var samples = int.Parse(Option(args, "--samples") ?? "5", CultureInfo.InvariantCulture);
+            var output = Option(args, "--out") ?? Path.Combine("harness", "out");
+            var limit = int.Parse(Option(args, "--limit") ?? "0", CultureInfo.InvariantCulture);
+            var keepFrames = args.Contains("--frames");
+
+            // Re-read a finished run instead of producing one. A corpus run is a quarter of an
+            // hour of rendering, and a better way of summarising it should not cost that again.
+            if (Option(args, "--report") is { Length: > 0 } finished)
+            {
+                Summarise(Read(finished).Blocks);
+                return 0;
+            }
+
+            var named = args.FirstOrDefault(a => !a.StartsWith("--")
+                                                 && !IsOptionValue(args, a));
+
+            if (!args.Contains("--all") && named is null)
+            {
+                Usage();
+                return 2;
+            }
+
+            var blocks = args.Contains("--all")
+                ? Corpus.All()
+                : [Corpus.Find(named!)];
+
+            if (limit > 0) blocks = [.. blocks.Take(limit)];
+
+            return await RunAsync(blocks, samples, output, keepFrames);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("cuprilex-harness: " + ex.Message);
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunAsync(
+        IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames)
+    {
+        var fonts = Engine.FindFonts();
+        Directory.CreateDirectory(output);
+
+        await using var browser = await Browser.LaunchAsync();
+
+        Console.WriteLine($"engine   CupriFace {Engine.Version}");
+        Console.WriteLine($"browser  {browser.Version}");
+        Console.WriteLine($"fonts    {fonts ?? "(none found - text will be scored against whatever is installed)"}");
+        Console.WriteLine($"blocks   {blocks.Count}, {samples} samples each");
+        Console.WriteLine();
+
+        // Appended as each block finishes. A run over the whole corpus is minutes long and a
+        // process that dies at block 150 should not cost the 149 measurements before it.
+        var incremental = Path.Combine(output, "blocks.jsonl");
+        File.Delete(incremental);
+
+        var scores = new List<Score>(blocks.Count);
+        var started = Stopwatch.StartNew();
+
+        foreach (var block in blocks)
+        {
+            var score = await ScoreAsync(browser, block, samples, output, keepFrames, fonts);
+            scores.Add(score);
+
+            await File.AppendAllTextAsync(incremental,
+                JsonSerializer.Serialize(score, new JsonSerializerOptions(Json) { WriteIndented = false })
+                + Environment.NewLine);
+
+            Report(score, blocks.Count == 1);
+        }
+
+        var report = new Baseline(Engine.Version, browser.Version, Environment.OSVersion.VersionString,
+            DateTimeOffset.UtcNow, samples, Math.Round(started.Elapsed.TotalSeconds, 1), scores);
+
+        var path = Path.Combine(output, "baseline.json");
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, Json));
+
+        if (blocks.Count > 1) Summarise(scores);
+        Console.WriteLine();
+        Console.WriteLine($"wrote {path}");
+        return 0;
+    }
+
+    private sealed record Baseline(
+        string Engine, string Browser, string Platform, DateTimeOffset Measured,
+        int Samples, double Seconds, IReadOnlyList<Score> Blocks);
+
+    private static Baseline Read(string path)
+    {
+        var loaded = JsonSerializer.Deserialize<Baseline>(File.ReadAllText(path), Json)
+                     ?? throw new InvalidOperationException($"'{path}' is not a baseline.");
+
+        Console.WriteLine($"CupriFace {loaded.Engine}, {loaded.Browser}, measured "
+                          + loaded.Measured.ToString("u", CultureInfo.InvariantCulture));
+        return loaded;
+    }
+
+    // ---- one block ----------------------------------------------------------------------------
+
+    private static async Task<Score> ScoreAsync(Browser browser, Block block, int samples,
+        string output, bool keepFrames, string? fonts)
+    {
+        // Sorted here, once. Both renderers return frames in ascending time order, so an unsorted
+        // list would pair frame i with a label that belongs to a different instant - and every
+        // number would be right while every row said the wrong time.
+        var times = Times(block.Duration, samples).OrderBy(t => t).ToArray();
+        var clock = Stopwatch.StartNew();
+
+        Score Failed(string why) => new(block.Name, block.Width, block.Height, block.Duration,
+            block.DurationSource, 0, 0, 0, 0, 0, 0, Math.Round(clock.Elapsed.TotalSeconds, 2),
+            [], [], [], why);
+
+        Reference reference;
+        try
+        {
+            reference = await Retried(() => browser.RenderAsync(block, times));
+        }
+        catch (BrowserException ex)
+        {
+            return Failed("no reference, twice: " + ex.Message);
+        }
+
+        var translated = Translation.Of(block);
+
+        Rendered rendered;
+        try
+        {
+            rendered = Engine.Render(block, translated.Html, times, fonts);
+        }
+        catch (Exception ex)
+        {
+            // An engine that throws on a real document is a finding, not a footnote. The report
+            // names it and the whole stack goes on disk beside the block, because the next
+            // question is always "where", and the answer belongs in the sibling repository's
+            // issue list rather than in a console buffer that scrolled away.
+            var crash = Path.Combine(output, block.Slug, "engine-crash.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(crash)!);
+            await File.WriteAllTextAsync(crash, ex.ToString());
+
+            return Failed($"the engine threw {ex.GetType().Name}: {OneLine(ex.Message)} "
+                          + $"(stack: {crash})");
+        }
+
+        var comparisons = new List<Sample>(times.Length);
+        for (var i = 0; i < times.Length; i++)
+        {
+            var c = Comparison.Of(reference.Frames[i], rendered.Frames[i]);
+            comparisons.Add(new Sample(Math.Round(times[i], 3),
+                Math.Round(c.Similarity, 5), Math.Round(c.Differing, 5)));
+        }
+
+        var worstIndex = comparisons.IndexOf(comparisons.MaxBy(s => s.Differing)!);
+        var folder = Path.Combine(output, block.Slug);
+
+        // The worst sample always, because it is the one that says what went wrong. Every sample
+        // when asked, because a single frame can be unrepresentative in both directions.
+        if (keepFrames)
+        {
+            for (var i = 0; i < times.Length; i++)
+            {
+                Diff.Write(reference.Frames[i], rendered.Frames[i],
+                    Path.Combine(folder, $"{i:00}-t{times[i]:0.###}.png"),
+                    Caption(block, comparisons[i]));
+                reference.Frames[i].Save(Path.Combine(folder, "full", $"{i:00}-browser.png"));
+                rendered.Frames[i].Save(Path.Combine(folder, "full", $"{i:00}-engine.png"));
+            }
+        }
+        else
+        {
+            Diff.Write(reference.Frames[worstIndex], rendered.Frames[worstIndex],
+                Path.Combine(folder, $"worst-t{times[worstIndex]:0.###}.png"),
+                Caption(block, comparisons[worstIndex]));
+        }
+
+        return new Score(
+            block.Name, block.Width, block.Height, block.Duration, block.DurationSource,
+            Math.Round(reference.TimelineSeconds, 3),
+            Math.Round(comparisons.Average(s => 1 - s.Differing), 5),
+            Math.Round(comparisons.Average(s => s.Similarity), 5),
+            Math.Round(1 - comparisons.Max(s => s.Differing), 5),
+            Math.Round(Movement(reference.Frames), 5),
+            Math.Round(Movement(rendered.Frames), 5),
+            Math.Round(clock.Elapsed.TotalSeconds, 2),
+            comparisons, translated.Refusals, rendered.Diagnostics, null);
+    }
+
+    /// <summary>
+    /// One more attempt at the reference, after a pause.
+    ///
+    /// <para>Every block in the corpus pulls GSAP from the same CDN, and a corpus run asks for it
+    /// 187 times in a few minutes. In the first full run one block came back with the document
+    /// complete and <c>gsap</c> undefined - a single request that did not arrive - and was
+    /// reported as unmeasured. A block the network dropped once is not a finding about the
+    /// engine, and leaving it in the report as though it were would be worse than the ten seconds
+    /// this costs.</para>
+    /// </summary>
+    private static async Task<Reference> Retried(Func<Task<Reference>> render)
+    {
+        try
+        {
+            return await render();
+        }
+        catch (BrowserException)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            return await render();
+        }
+    }
+
+    /// <summary>
+    /// The share of the frame a renderer's own samples change, against its first one. Zero means
+    /// every sample came out identical - nothing moved.
+    ///
+    /// <para>Measured in differing pixels rather than mean error, because mean error over a frame
+    /// that is four fifths flat background reports a composition rebuilding itself completely as
+    /// "2% of movement", which reads like a still.</para>
+    /// </summary>
+    private static double Movement(IReadOnlyList<Frame> frames) =>
+        frames.Count < 2 ? 0 : frames.Skip(1).Average(f => Comparison.Of(frames[0], f).Differing);
+
+    /// <summary>Evenly spaced over the declared duration, both ends included. The ends are where
+    /// the disagreement usually is: <c>t=0</c> catches an opening state the engine never applied,
+    /// and <c>t=end</c> catches a composition that finished somewhere the engine never went.</summary>
+    public static IReadOnlyList<double> Times(double duration, int samples)
+    {
+        if (samples < 1) throw new ArgumentOutOfRangeException(nameof(samples), "at least one sample");
+        if (samples == 1) return [duration / 2];
+        return [.. Enumerable.Range(0, samples).Select(i => duration * i / (samples - 1))];
+    }
+
+    // ---- reporting ----------------------------------------------------------------------------
+
+    private static void Report(Score score, bool verbose)
+    {
+        if (score.Failure is { } failure)
+        {
+            Console.WriteLine($"{score.Block,-38}  ----   {failure}");
+            return;
+        }
+
+        var frozen = score.EngineMoves == 0 ? "  engine still" : "";
+        Console.WriteLine($"{score.Block,-38}  {Percent(score.Matching),7} matching  "
+                          + $"worst {Percent(score.Worst),7}  ref moves {Percent(score.ReferenceMoves),6}{frozen}");
+
+        if (!verbose) return;
+
+        Console.WriteLine();
+        Console.WriteLine($"  {score.Width}x{score.Height}, {score.Duration:0.###}s declared "
+                          + $"({score.DurationSource}), timeline spans {score.TimelineSeconds:0.###}s");
+
+        if (score.TimelineSeconds > 0 && Math.Abs(score.TimelineSeconds - score.Duration) > 0.25)
+            Console.WriteLine("  NOTE the timeline and the declared duration disagree, so some "
+                              + "samples land where the reference is already a still frame.");
+
+        Console.WriteLine();
+        Console.WriteLine($"  {"time",8}  {"matching",10}  {"mean error",12}");
+        foreach (var s in score.Samples)
+            Console.WriteLine($"  {s.Time,8:0.###}  {Percent(1 - s.Differing),10}  {Percent(1 - s.Similarity),12}");
+
+        if (score.Refusals.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  not carried:");
+            foreach (var r in score.Refusals) Console.WriteLine("    - " + r);
+        }
+
+        if (score.Diagnostics.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  the engine said:");
+            foreach (var d in score.Diagnostics.Take(8)) Console.WriteLine("    - " + Clip(d, 110));
+            if (score.Diagnostics.Count > 8)
+                Console.WriteLine($"    ... and {score.Diagnostics.Count - 8} more codes");
+        }
+    }
+
+    private static void Summarise(IReadOnlyList<Score> scores)
+    {
+        var scored = scores.Where(s => s.Failure is null).ToArray();
+        var failed = scores.Where(s => s.Failure is not null).ToArray();
+
+        Console.WriteLine();
+        Console.WriteLine($"{scored.Length} scored, {failed.Length} unmeasured");
+
+        if (scored.Length == 0) return;
+
+        Console.WriteLine($"mean matching    {Percent(scored.Average(s => s.Matching))}");
+        Console.WriteLine($"median           {Percent(Median([.. scored.Select(s => s.Matching)]))}");
+        Console.WriteLine($"worst block      {Percent(scored.Min(s => s.Matching))}  "
+                          + $"({scored.MinBy(s => s.Matching)!.Block})");
+        Console.WriteLine($"best block       {Percent(scored.Max(s => s.Matching))}  "
+                          + $"({scored.MaxBy(s => s.Matching)!.Block})");
+        Console.WriteLine($"mean error       {Percent(1 - scored.Average(s => s.Similarity))} "
+                          + "of full scale, per channel");
+        Console.WriteLine($"engine still     {scored.Count(s => s.EngineMoves == 0)} of {scored.Length} "
+                          + "blocks rendered the same frame at every time");
+
+        // The qualification that keeps the headline honest. editorial-flash-overlay scores 100%
+        // and its reference does not change by a single pixel across the whole composition: the
+        // two renderers agree about a still, which is not evidence that anything was carried.
+        var animated = scored.Where(s => s.ReferenceMoves >= 0.01).ToArray();
+        Console.WriteLine($"still reference  {scored.Length - animated.Length} of {scored.Length} "
+                          + "blocks change under 1% of their pixels over time; their score says little");
+
+        if (animated.Length > 0)
+            Console.WriteLine($"mean matching    {Percent(animated.Average(s => s.Matching))} "
+                              + $"over the {animated.Length} blocks whose reference actually moves "
+                              + "- the number to beat");
+
+        if (failed.Length == 0) return;
+
+        // Grouped by cause, because thirty-six blocks failing for one reason and thirty-six
+        // failing for thirty-six reasons are very different pieces of news, and a flat list of
+        // near-identical lines hides which one it is.
+        Console.WriteLine();
+        Console.WriteLine("unmeasured, by cause:");
+
+        foreach (var cause in failed.GroupBy(f => Cause(f.Failure!)).OrderByDescending(g => g.Count()))
+        {
+            Console.WriteLine($"  {cause.Count(),3}  {Clip(cause.Key, 100)}");
+            Console.WriteLine($"       {Clip(string.Join(", ", cause.Select(f => f.Block)), 100)}");
+        }
+    }
+
+    /// <summary>A failure reason with the block-specific tail cut off, so identical causes group.
+    /// The stack path and the state dump differ per block; the sentence in front of them does
+    /// not.</summary>
+    private static string Cause(string failure)
+    {
+        var cut = failure.IndexOf(" (stack:", StringComparison.Ordinal);
+        if (cut < 0) cut = failure.IndexOf(". State was", StringComparison.Ordinal);
+        return (cut < 0 ? failure : failure[..cut]).Trim();
+    }
+
+    private static double Median(double[] values)
+    {
+        Array.Sort(values);
+        return values.Length % 2 == 1
+            ? values[values.Length / 2]
+            : (values[values.Length / 2 - 1] + values[values.Length / 2]) / 2;
+    }
+
+    // ---- plumbing -----------------------------------------------------------------------------
+
+    private static void Usage()
+    {
+        Console.WriteLine("""
+            How close is the engine to a browser, for one block or for all of them?
+
+                dotnet run --project harness -- <block>        score one block
+                dotnet run --project harness -- --all          score the corpus
+
+                --samples N    times to sample across the declared duration (default 5)
+                --out DIR      where frames and baseline.json go (default harness/out)
+                --frames       keep every sample's images, not only the worst
+                --limit N      stop after N blocks, for a quick look
+
+                --report FILE  re-summarise a finished run's baseline.json, rendering nothing
+
+            Needs the corpus: python tools/fetch-corpus.py
+            """);
+    }
+
+    private static string Caption(Block block, Sample sample) =>
+        $"{block.Name}   t={sample.Time.ToString("0.###", CultureInfo.InvariantCulture)}s   "
+        + $"{Percent(1 - sample.Differing)} matching, {Percent(1 - sample.Similarity)} mean error";
+
+    private static string Percent(double fraction) =>
+        (fraction * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+
+    private static string Clip(string s, int n) => s.Length <= n ? s : s[..(n - 1)] + "…";
+
+    /// <summary>A multi-line exception message ruins a table, and every failure here is a row.</summary>
+    private static string OneLine(string s) =>
+        string.Join(' ', s.Split(['\n', '\r'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private static string? Option(string[] args, string name)
+    {
+        var i = Array.IndexOf(args, name);
+        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+    }
+
+    /// <summary>Whether this argument is some option's value rather than the block name.</summary>
+    private static bool IsOptionValue(string[] args, string argument)
+    {
+        var i = Array.IndexOf(args, argument);
+        return i > 0 && args[i - 1].StartsWith("--");
+    }
+}

@@ -151,6 +151,142 @@ public static class Cases
         Added("border-left", "8px solid", "width:120px;height:80px;", "border-left:8px solid #d9642a;",
             controlPaintsNothing: true),
 
+        // The shorthand splits its value on spaces and hands each token to the colour parser, so
+        // "rgba(198," arrives with an opening parenthesis and no closing one and the parser
+        // indexes past the end. In 0.26.1 this THROWS rather than failing to paint, which the
+        // probe records as "does not paint" - the matrix cannot say "crashed", but it can say the
+        // day it stops. 36 blocks of the corpus carry one, and the two that were found first
+        // could not be loaded at all. See docs/TRANSLATION.md.
+        Added("border", "1px solid rgba(r, g, b, a)", "width:120px;height:80px;",
+            "border:8px solid rgba(217, 100, 42, 1);", controlPaintsNothing: true),
+        Added("border", "1px solid rgba(r,g,b,a)", "width:120px;height:80px;",
+            "border:8px solid rgba(217,100,42,1);", controlPaintsNothing: true),
+
+        // 115 blocks of 187 write `inset: 0` to make a child fill its parent - an overlay, a
+        // backdrop, an end card that covers the composition. The engine reports CF0050 and lays
+        // the element out with no size at all, so the thing that was supposed to cover everything
+        // covers nothing. The pair below is the evidence for the rewrite: the shorthand against
+        // the four longhands it expands to, same document otherwise.
+        new("inset", "0 (shorthand)",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;inset:0;background:#d9642a;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;background:#d9642a;}"),
+            ControlPaintsNothing: true),
+
+        new("inset", "0 (four longhands)",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;top:0;right:0;bottom:0;left:0;background:#d9642a;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;background:#d9642a;}"),
+            ControlPaintsNothing: true),
+
+        new("inset", "0 (percent size)",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;top:0;left:0;width:100%;height:100%;background:#d9642a;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:160px;height:100px;}"
+                + ".p{position:absolute;background:#d9642a;}"),
+            ControlPaintsNothing: true),
+
+        // ---- selectors, because a compiled animation is only as good as what it matches -----
+        // The compiler resolves every target to a selector: a string the author wrote, or the one
+        // a document.querySelector() was given. If the engine matches a narrower set of selectors
+        // than a browser, a correct @keyframes lands on nothing at all - and nothing at all is
+        // exactly what a still frame looks like.
+        new("selector", "descendant (.box .p)",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;}.box .p{background:#d9642a;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        new("selector", "id (#p)",
+            new Doc("<div id=\"p\"></div>", "#p{width:120px;height:80px;background:#d9642a;}"),
+            new Doc("<div id=\"p\"></div>", "#p{width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        new("selector", "compound (.p.q)",
+            new Doc("<div class=\"p q\"></div>",
+                ".p{width:120px;height:80px;}.p.q{background:#d9642a;}"),
+            new Doc("<div class=\"p q\"></div>", ".p{width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        new("selector", "child (.box > .p)",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;}.box > .p{background:#d9642a;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        // An animation reached through a descendant selector: the combination the compiler
+        // actually emits, rather than the two halves separately.
+        new("selector", "animation via descendant",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;background:#d9642a;}"
+                + "@keyframes probe{from{opacity:1;}to{opacity:0;}}"
+                + ".box .p{animation:probe 2s linear both;}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".p{width:120px;height:80px;background:#d9642a;}"),
+            new Animation("@keyframes probe2{from{opacity:1;}to{opacity:0;}}"
+                          + ".box .p{animation:probe2 2s linear both;}", 2),
+            At: 2),
+
+        // ---- the shape the compiler actually emits ------------------------------------------
+        // An animated property has to beat the element's own static declaration, or a compiled
+        // @keyframes lands on an element whose stylesheet already said opacity:0 and nothing
+        // moves. Sampled at t=0, where the animation says 1 and the rule says 0.2.
+        new("animation", "beats a static declaration",
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;opacity:0.2;}"
+                         + "@keyframes probe{0%{opacity:1;}100%{opacity:0.5;}}"
+                         + ".p{animation:probe 2s linear both;}"),
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;opacity:0.2;}")),
+
+        // The compiler samples eased tweens into stops, and those stops land on percentages like
+        // 28.4746%. If the engine wants round numbers, every compiled animation is wrong in a way
+        // that no diagnostic would mention.
+        new("@keyframes", "fractional percentages",
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;}"
+                         + "@keyframes probe{0%{opacity:1;}28.4746%{opacity:0.5;}100%{opacity:0;}}"
+                         + ".p{animation:probe 2s linear both;}"),
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;}"),
+            At: 0.5693),
+
+        // Many stops, which is what sampling a curve produces.
+        new("@keyframes", "many stops",
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;}"
+                         + "@keyframes probe{0%{transform:translateX(0px);}"
+                         + "12.5%{transform:translateX(10px);}25%{transform:translateX(30px);}"
+                         + "37.5%{transform:translateX(60px);}50%{transform:translateX(100px);}"
+                         + "62.5%{transform:translateX(130px);}75%{transform:translateX(150px);}"
+                         + "87.5%{transform:translateX(160px);}100%{transform:translateX(165px);}}"
+                         + ".p{animation:probe 2s linear both;}"),
+            new Doc(Div, ".p{width:120px;height:80px;background:#d9642a;}"),
+            At: 1),
+
+        // The compiler rewrites colours to hex to get past a crash elsewhere. That is only safe
+        // if the engine paints the two forms identically - the pair below asks it directly, with
+        // an alpha that does not divide evenly into 255.
+        new("rgba vs hex", "text colour, alpha 0.65",
+            new Doc(Text, ".p{font-size:40px;color:rgba(230,237,243,0.65);}"),
+            new Doc(Text, ".p{font-size:40px;color:#e6edf3a6;}")),
+
+        // The same colour with the alpha TRUNCATED rather than rounded - 0.65 * 255 is 165.75,
+        // and the engine's own cast makes that 165. These two should be indistinguishable, and a
+        // "yes" here means the rewrite is one level off on every colour it touches.
+        new("rgba vs hex", "truncated alpha, should match",
+            new Doc(Text, ".p{font-size:40px;color:rgba(230,237,243,0.65);}"),
+            new Doc(Text, ".p{font-size:40px;color:#e6edf3a5;}")),
+
+        new("rgba vs hex", "background, alpha 0.65",
+            new Doc(Div, ".p{width:120px;height:80px;background:rgba(230,237,243,0.65);}"),
+            new Doc(Div, ".p{width:120px;height:80px;background:#e6edf3a6;}")),
+
         // ---- the trap that would silently break every staggered import ------------------------
         // Both documents animate; the delayed one should still be at its START value at t=0.5.
         // If calc() is honoured they differ there; if it is treated as zero they do not.

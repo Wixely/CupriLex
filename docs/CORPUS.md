@@ -110,8 +110,18 @@ motion.
 That is not a reason to stop — it is the reason to have measured before writing rewrite rules, and
 it changes what "supported" can honestly mean. Some of these have workarounds (a `clip-path: inset`
 is an `overflow: hidden` parent; a static `<svg>` could be rasterised at import). Some do not.
-Milestone 2's comparison harness is what will say which blocks are actually reachable, and the
-answer should be published rather than estimated.
+
+### What the harness then measured
+
+The [comparison harness](HARNESS.md) has since scored the corpus frame by frame against a browser,
+and found three things the survey above could not see, because none of them is a CSS property:
+
+| | blocks | |
+|---|---|---|
+| a `border` shorthand with a spaced `rgb()` | **35** | **crashes CupriFace 0.26.1.** The document cannot be loaded at all, so these blocks have no score, not a bad one. |
+| the composition inside a `<template>` | **13** | inert. Renders nothing in any browser until a host clones it in. |
+| `window.__timelines` expected to already exist | **25** | the block throws without it, and never registers its timeline |
+| `data-duration` disagreeing with the timeline's own span | **50 of 150** | by more than a quarter of a second. The compiler will have to decide which one a translated composition keeps. |
 
 ---
 
@@ -137,5 +147,6 @@ it.
 **The fraction of the corpus that renders correctly.** Not the number of rewrite rules, not the
 number of blocks that parse without an error — how many produce frames that match the browser.
 
-That means the comparison harness is not optional tooling to add later. It is the instrument the
-project is steered by, and it should exist before the second rewrite rule does.
+That instrument now exists — `harness/`, see [HARNESS.md](HARNESS.md) — and its first reading is
+**55.2% matching over the 125 blocks whose reference actually moves**, with **150 of 150 scored
+blocks rendering one still frame**. Nothing animates yet, which is the honest place to start from.

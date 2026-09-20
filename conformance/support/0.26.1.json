@@ -2,7 +2,7 @@
   "engine": "0.26.1",
   "platform": "Win32NT",
   "runtime": "10.0.10",
-  "measured": "2026-09-19T19:52:56.3518554+00:00",
+  "measured": "2026-09-20T00:39:41.6232345+00:00",
   "support": [
     {
       "property": "width",
@@ -211,6 +211,123 @@
     {
       "property": "border-left",
       "value": "8px solid",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r, g, b, a)",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "threw while rendering: ArgumentOutOfRangeException: length (\u0027-6\u0027) must be a non-negative value. (Parameter \u0027length\u0027)"
+      ]
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r,g,b,a)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (shorthand)",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027inset\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "inset",
+      "value": "0 (four longhands)",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (percent size)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "descendant (.box .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "id (#p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "compound (.p.q)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "child (.box \u003E .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "animation via descendant",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "animation",
+      "value": "beats a static declaration",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "fractional percentages",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "many stops",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "text colour, alpha 0.65",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "truncated alpha, should match",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "background, alpha 0.65",
       "parses": true,
       "paints": true,
       "diagnostics": []

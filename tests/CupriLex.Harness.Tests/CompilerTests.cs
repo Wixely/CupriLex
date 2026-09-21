@@ -260,6 +260,63 @@ public class CompilerTests
         Assert.Contains(compiled.Refusals, r => r.What.Contains("stagger", StringComparison.Ordinal));
     }
 
+    // ---- a refusal must not move the clock -----------------------------------------------------
+
+    /// <summary>
+    /// A tween this compiler cannot carry still occupies its place on the timeline.
+    ///
+    /// <para>The failure it guards against is the nastiest kind: everything downstream renders
+    /// perfectly and at the wrong moment. A <c>.to()</c> of <c>backgroundColor</c> is refused
+    /// because the engine cannot animate it, and if the refusal also drops the two seconds it
+    /// occupied then every un-positioned tween after it starts two seconds early. Nothing in the
+    /// output looks wrong; the composition is simply ahead of itself.</para>
+    ///
+    /// <para>Found by sweeping the engine's clock against the browser's on <c>transitions-grid</c>,
+    /// where shifting the engine forward three quarters of a second recovered 5% of content.</para>
+    /// </summary>
+    [Fact]
+    public void A_tween_whose_properties_are_all_refused_still_takes_its_time()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { backgroundColor: "#ffffff", duration: 2 });
+            tl.to(".a", { x: 100, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("3s linear both", css);
+    }
+
+    /// <summary>The same for a target that cannot be reduced to a selector: unknown WHERE, but the
+    /// duration was written down and is not in doubt.</summary>
+    [Fact]
+    public void A_tween_on_an_unresolvable_target_still_takes_its_time()
+    {
+        var css = Css("""
+            const mystery = window.somethingOpaque();
+            const tl = gsap.timeline();
+            tl.to(mystery, { x: 50, duration: 2 });
+            tl.to(".a", { x: 100, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("3s linear both", css);
+    }
+
+    /// <summary>When the duration itself cannot be read, the clock cannot be advanced and
+    /// everything after it is suspect. That is worth its own refusal rather than a silent
+    /// guess.</summary>
+    [Fact]
+    public void A_tween_whose_duration_is_unknown_says_the_timeline_after_it_is_unreliable()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", window.opaqueVars());
+            tl.to(".a", { x: 100, duration: 1 });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("everything after it", StringComparison.Ordinal));
+    }
+
     // ---- carried, and still not visible --------------------------------------------------------
 
     /// <summary>

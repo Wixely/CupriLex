@@ -86,6 +86,7 @@ public static class Program
             var limit = int.Parse(Option(args, "--limit") ?? "0", CultureInfo.InvariantCulture);
             var keepFrames = args.Contains("--frames");
             var gallery = args.Contains("--gallery");
+            var align = args.Contains("--align");
 
             // Re-read a finished run instead of producing one. A corpus run is a quarter of an
             // hour of rendering, and a better way of summarising it should not cost that again.
@@ -108,6 +109,8 @@ public static class Program
                 ? Corpus.All()
                 : [Corpus.Find(named!)];
 
+            if (align) return await AlignAsync(blocks[0], samples, Engine.FindFonts());
+
             if (limit > 0) blocks = [.. blocks.Take(limit)];
 
             return await RunAsync(blocks, samples, output, keepFrames, gallery);
@@ -117,6 +120,100 @@ public static class Program
             Console.Error.WriteLine("cuprilex-harness: " + ex.Message);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Is the engine's clock the same clock as the browser's?
+    ///
+    /// <para>Renders the browser at each sample time and the engine at that time plus a sweep of
+    /// offsets, then reports which offset makes the frames agree best. If the two clocks are
+    /// aligned the answer is zero at every sample; a consistent non-zero answer is a systematic
+    /// lead or lag, and every score in this repository would be measuring it.</para>
+    ///
+    /// <para>Worth having as a standing diagnostic rather than a one-off, because the symptom that
+    /// prompted it - the worst sample of a block usually falling near a transition - has an
+    /// innocent explanation as well as a guilty one. A transition is where the frame changes
+    /// fastest, so it is where ANY timing error costs the most pixels, and it is also where the
+    /// most content is in flight for reasons that have nothing to do with the clock. Only the
+    /// sweep separates those.</para>
+    /// </summary>
+    private static async Task<int> AlignAsync(Block block, int samples, string? fonts)
+    {
+        await using var browser = await Browser.LaunchAsync();
+
+        var times = Times(block.Duration, samples).OrderBy(t => t).ToArray();
+        var reference = await browser.RenderAsync(block, times);
+        var html = Translation.Of(block).Html;
+
+        // A tenth of a second either way, then a coarse second, which is wide enough to catch a
+        // whole-tween lag and fine enough to see a frame's worth.
+        double[] offsets =
+        [
+            -1.0, -0.75, -0.5, -0.4, -0.3, -0.2, -0.15, -0.1, -0.05,
+            0,
+            0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0,
+        ];
+
+        Console.WriteLine($"{block.Name}: {block.Width}x{block.Height}, "
+                          + $"{block.Duration.ToString("0.###", CultureInfo.InvariantCulture)}s, "
+                          + $"{samples} samples");
+        Console.WriteLine();
+        Console.WriteLine($"  {"offset",8}  {"content wrong",14}");
+
+        var best = (Offset: 0.0, Wrong: double.MaxValue);
+        var atZero = 0.0;
+        var curve = new List<(double Offset, double Wrong)>();
+
+        foreach (var offset in offsets)
+        {
+            var shifted = times.Select(t => Math.Max(0, t + offset)).ToArray();
+            var rendered = Engine.Render(block, html, shifted, fonts);
+
+            var wrong = 0.0;
+            for (var i = 0; i < times.Length; i++)
+                wrong += Comparison.Of(reference.Frames[i], rendered.Frames[i]).ContentDiffering;
+            wrong /= times.Length;
+
+            curve.Add((offset, wrong));
+            if (offset == 0) atZero = wrong;
+
+            // Ties go to the smaller shift, and zero beats everything it ties with. Without that
+            // the sweep "finds" a 50ms lead on any block whose curve is flat, which is most of
+            // them once the motion has finished.
+            if (wrong < best.Wrong - 1e-9
+                || (Math.Abs(wrong - best.Wrong) <= 1e-9 && Math.Abs(offset) < Math.Abs(best.Offset)))
+                best = (offset, wrong);
+
+            Console.WriteLine($"  {offset,8:+0.00;-0.00;0.00}  {Percent(wrong),14}"
+                              + (offset == 0 ? "   <- no offset" : ""));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"best offset {best.Offset:+0.00;-0.00;0.00}s at {Percent(best.Wrong)} wrong, "
+                          + $"against {Percent(atZero)} with no offset");
+        // A real lead or lag is a valley: the offsets either side of the best one also beat zero,
+        // because shifting a little less still helps a little. A single offset that beats zero
+        // while its neighbours do not is one sample happening to line up, and it moves when the
+        // sample count changes - which is exactly what the first version of this reported as a
+        // 0.75s lag on transitions-grid.
+        // The neighbours have to beat zero by a real margin, not by rounding noise. A quarter of
+        // the best improvement is arbitrary and it is enough: on transitions-grid the neighbours
+        // beat zero by 0.1% against a 3.4% dip, which is a spike, and this rejects it.
+        var gain = atZero - best.Wrong;
+        var at = curve.FindIndex(p => p.Offset == best.Offset);
+        var valley = at > 0 && at < curve.Count - 1
+                     && curve[at - 1].Wrong < atZero - gain / 4
+                     && curve[at + 1].Wrong < atZero - gain / 4;
+
+        Console.WriteLine(Math.Abs(best.Offset) < 1e-9 || atZero - best.Wrong < 0.005 || !valley
+            ? "The clocks agree. No shift recovers half a percent of content with its neighbours "
+              + "agreeing, which is what a real lead or lag looks like."
+            : $"Shifting the engine by {best.Offset:+0.00;-0.00}s recovers "
+              + $"{Percent(atZero - best.Wrong)} of content, and the offsets either side agree. "
+              + "That is a systematic lead or lag and no score should be trusted until it is "
+              + "explained.");
+
+        return 0;
     }
 
     private static async Task<int> RunAsync(
@@ -460,6 +557,7 @@ public static class Program
                 --limit N      stop after N blocks, for a quick look
 
                 --gallery      also write index.html: every block, worst first, with its images
+                --align        sweep the engine's clock against the browser's, for one block
                 --report FILE  re-summarise a finished run's baseline.json, rendering nothing
 
             Needs the corpus: python tools/fetch-corpus.py

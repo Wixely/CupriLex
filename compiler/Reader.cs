@@ -367,6 +367,21 @@ public sealed class Reader
         clock.Labels[name] = at.Value;
     }
 
+    /// <summary>
+    /// One tween, read and placed.
+    ///
+    /// <para>The order here is load-bearing and it is not the obvious one. Everything needed to
+    /// occupy the right SLICE OF TIME is worked out first - duration, delay, position - and the
+    /// clock is advanced before anything that might refuse. A refusal must never move the clock:
+    /// a <c>.to()</c> of <c>backgroundColor</c> cannot be carried, but in the browser it still
+    /// takes its two seconds, and dropping them puts every un-positioned tween after it two
+    /// seconds early. That failure renders perfectly and at the wrong moment, which is the hardest
+    /// kind to see.</para>
+    ///
+    /// <para>Found by sweeping the engine's clock against the browser's on <c>transitions-grid</c>,
+    /// where shifting the engine forward 0.75s recovered 5% of content. The first version returned
+    /// from five different places before reaching the cursor.</para>
+    /// </summary>
     private void Tween(CallExpression call, string verb, Clock? clock, Scope scope)
     {
         var line = Line(call);
@@ -377,6 +392,70 @@ public sealed class Reader
             _refusals.Add(new Refusal($".{verb}() with no arguments", line));
             return;
         }
+
+        var valuesIndex = verb == "fromTo" ? 2 : 1;
+        var positionIndex = verb == "fromTo" ? 3 : 2;
+
+        // ---- how long it lasts, before anything can refuse ------------------------------------
+
+        var defaults = clock?.Defaults;
+        var values = arguments.Count > valuesIndex
+            ? Evaluator.Of(arguments[valuesIndex], scope) as Value.Bag
+            : null;
+
+        // A values object that cannot be read takes its duration with it, and without a duration
+        // the clock cannot be advanced honestly. Everything after this point on this timeline is
+        // then suspect, which is worth saying out loud rather than quietly getting wrong.
+        if (values is null)
+        {
+            _refusals.Add(new Refusal(
+                $"a .{verb}() whose values are not known, so its duration is not known either - "
+                + "the clock cannot be advanced past it and everything after it on this timeline "
+                + "may be early", line));
+            return;
+        }
+
+        var duration = verb == "set" ? 0 : Setting(values, defaults, "duration") ?? 0.5;
+        var delay = Setting(values, defaults, "delay") ?? 0;
+
+        // GSAP's own default, not linear. A tween written without an ease still accelerates, and
+        // treating it as linear would put every un-eased element in the wrong place mid-tween.
+        var ease = Text(values, defaults, "ease") ?? "power1.out";
+
+        // ---- where it lands --------------------------------------------------------------------
+
+        double start;
+        if (clock is null)
+        {
+            // A bare gsap.to() has no timeline to append to, so it starts at its delay.
+            start = delay;
+        }
+        else
+        {
+            var position = arguments.Count > positionIndex
+                ? Place(Evaluator.Of(arguments[positionIndex], scope), clock)
+                : clock.Cursor;
+
+            if (position is null)
+            {
+                _refusals.Add(new Refusal(
+                    $"a .{verb}() placed at `{Snippet(arguments[positionIndex])}`, which is not "
+                    + "knowable, so the clock cannot be advanced past it and everything after it "
+                    + "on this timeline may be early", line));
+                return;
+            }
+
+            start = position.Value + delay;
+        }
+
+        // The clock moves HERE, for every tween whose extent is known, carried or not.
+        if (clock is not null)
+        {
+            clock.LastStart = start;
+            clock.Cursor = Math.Max(clock.Cursor, start + duration);
+        }
+
+        // ---- and only now, what it is worth ----------------------------------------------------
 
         var targetValue = Evaluator.Of(arguments[0], scope);
 
@@ -394,32 +473,17 @@ public sealed class Reader
             return;
         }
 
-        var valuesIndex = verb == "fromTo" ? 2 : 1;
-        var positionIndex = verb == "fromTo" ? 3 : 2;
-
-        if (arguments.Count <= valuesIndex || Evaluator.Of(arguments[valuesIndex], scope) is not Value.Bag values)
-        {
-            _refusals.Add(new Refusal($"a .{verb}() on '{selector}' whose values are not known", line));
-            return;
-        }
-
         Value.Bag? fromValues = null;
         if (verb == "fromTo")
         {
             if (Evaluator.Of(arguments[1], scope) is not Value.Bag opening)
             {
-                _refusals.Add(new Refusal($"a .fromTo() on '{selector}' whose start values are not known", line));
+                _refusals.Add(new Refusal(
+                    $"a .fromTo() on '{selector}' whose start values are not known", line));
                 return;
             }
             fromValues = opening;
         }
-
-        var defaults = clock?.Defaults;
-        var duration = verb == "set" ? 0 : Setting(values, defaults, "duration") ?? 0.5;
-        var delay = Setting(values, defaults, "delay") ?? 0;
-        // GSAP's own default, not linear. A tween written without an ease still accelerates, and
-        // treating it as linear would put every un-eased element in the wrong place mid-tween.
-        var ease = Text(values, defaults, "ease") ?? "power1.out";
 
         if (Setting(values, defaults, "stagger") is { } stagger && stagger != 0)
             _refusals.Add(new Refusal(
@@ -429,40 +493,11 @@ public sealed class Reader
         if (Setting(values, defaults, "repeat") is { } repeat && repeat != 0)
             _refusals.Add(new Refusal($"repeat: {repeat} on '{selector}'", line));
 
-        // Where it lands. A bare gsap.to() has no timeline to append to, so it starts at its delay.
-        double start;
-        if (clock is null)
-        {
-            start = delay;
-        }
-        else
-        {
-            var position = arguments.Count > positionIndex
-                ? Place(Evaluator.Of(arguments[positionIndex], scope), clock)
-                : clock.Cursor;
-
-            if (position is null)
-            {
-                _refusals.Add(new Refusal(
-                    $"a .{verb}() on '{selector}' placed at "
-                    + $"`{Snippet(arguments[positionIndex])}`, which is not knowable", line));
-                return;
-            }
-
-            start = position.Value + delay;
-        }
-
         var (to, refusedTo) = Amounts(values, selector, verb, line);
         var from = fromValues is null ? null : Amounts(fromValues, selector, verb, line).Amounts;
         _refusals.AddRange(refusedTo);
 
         if (to.Count == 0 && (from is null || from.Count == 0)) return;
-
-        if (clock is not null)
-        {
-            clock.LastStart = start;
-            clock.Cursor = Math.Max(clock.Cursor, start + duration);
-        }
 
         _tweens.Add(new RawTween(
             selector, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line));
@@ -615,7 +650,8 @@ public sealed class Reader
         foreach (var (verb, (count, line)) in missed)
             _refusals.Add(new Refusal(
                 $"{count} .{verb}() call(s) inside a loop, a callback or a function this compiler "
-                + "does not follow - their motion is not carried", line));
+                + "does not follow - their motion is not carried, and neither is the TIME they "
+                + "occupy, so anything appended after them on the same timeline runs early", line));
     }
 
     /// <summary>The line in the BLOCK, not in the script: the script's own offset plus the lines

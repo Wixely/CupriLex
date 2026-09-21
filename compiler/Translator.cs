@@ -37,7 +37,6 @@ public static class Translator
         var refusals = sheet.Refusals.ToList();
 
         Descript(output, refusals);
-        Restyle(output);
         if (directory is { Length: > 0 }) Rebase(output, directory);
         Style(output, sheet.Css);
 
@@ -46,7 +45,47 @@ public static class Translator
                 $"{inlined} <template> element(s) were inlined: their content is inert in any "
                 + "browser until a host clones it in, and the engine has no host"));
 
+        refusals.AddRange(Unmatched(output, sheet));
+
         return new Translated(output.ToHtml(), sheet, refusals);
+    }
+
+    /// <summary>
+    /// Animations whose selector matches nothing in the document they are about to be written
+    /// into.
+    ///
+    /// <para>Resolution never consults the document: a target becomes the selector TEXT the author
+    /// wrote, which is what makes the compiler static and what makes it impossible for it to be
+    /// wrong about which elements it meant. The cost of that is it cannot know whether the
+    /// selector finds anything, and a great many of these blocks build their elements in the
+    /// JavaScript that has just been thrown away. The rule is then emitted, valid and correct and
+    /// matching nothing at all.</para>
+    ///
+    /// <para>Checking it here is verification rather than resolution, and it is the difference
+    /// between a translation that quietly does nothing and one that says which animations landed
+    /// on no element. A selector the engine cannot parse counts as unmatched too: it would also
+    /// have applied to nothing.</para>
+    /// </summary>
+    private static IEnumerable<Refusal> Unmatched(IHtmlDocument document, Sheet sheet)
+    {
+        foreach (var selector in sheet.Selectors)
+        {
+            // Negative for a selector the document cannot even be queried with: that matches
+            // nothing either, and the report should say which of the two happened.
+            int matches;
+            try { matches = document.QuerySelectorAll(selector).Length; }
+            catch (Exception ex) when (ex is DomException or ArgumentException) { matches = -1; }
+
+            if (matches < 0)
+                yield return new Refusal(
+                    $"an animation on '{selector}', which is not a selector this document can be "
+                    + "queried with, so nothing will match it");
+            else if (matches == 0)
+                yield return new Refusal(
+                    $"an animation on '{selector}', which matches no element in the translated "
+                    + "document - the element it names is built by the JavaScript that has been "
+                    + "removed, so the motion is compiled and lands on nothing");
+        }
     }
 
     /// <summary>
@@ -84,118 +123,6 @@ public static class Translator
         foreach (var script in document.QuerySelectorAll("script").ToArray())
             script.Remove();
     }
-
-    private static readonly Regex SpacedColour = new(
-        @"\b(?<fn>rgba?)\(\s*(?<parts>[^()]*?)\s*\)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    /// <summary>
-    /// The spaces taken out of every <c>rgb()</c> and <c>rgba()</c>.
-    ///
-    /// <para>A rewrite rule, and the condition it works around is measured rather than assumed:
-    /// <c>rgba(198, 173, 144, 0.32)</c> <em>crashes</em> CupriFace 0.26.1 in three different
-    /// places, and the same colour without the spaces does not - see
-    /// <c>conformance/support/0.26.1.json</c> and <c>EngineBugTests</c>. The fault is in
-    /// <c>Colors.TryParse</c>, which takes the text between the parentheses with
-    /// <c>text[(IndexOf('(') + 1)..IndexOf(')')]</c> and gets a length of -6 when there is no
-    /// closing one. Three callers hand it a fragment that has none, each by splitting a value on
-    /// spaces: the <c>border</c> shorthand, <c>ParseGradient</c>, and <c>ParseFilterOps</c>.</para>
-    ///
-    /// <para>The first version of this rule rewrote colours inside <c>border</c> declarations
-    /// only, because that is where the first two crashing blocks had theirs. It recovered 25
-    /// blocks and left 10 still crashing - in gradient stops and in a <c>drop-shadow()</c> - which
-    /// is what a corpus run is for. Taking the spaces out of every colour function is harmless
-    /// everywhere and covers all three callers.</para>
-    ///
-    /// <para>When the engine is fixed this rule should be deleted: <c>EngineBugTests</c> fails on
-    /// that day and says so.</para>
-    /// </summary>
-    private static void Restyle(IHtmlDocument document)
-    {
-        foreach (var style in document.QuerySelectorAll("style"))
-            style.TextContent = Rewrites(style.TextContent);
-
-        foreach (var element in document.QuerySelectorAll("[style]"))
-            if (element.GetAttribute("style") is { } inline)
-                element.SetAttribute("style", Rewrites(inline));
-    }
-
-    private static string Rewrites(string css) => Fill(Unspace(css));
-
-    /// <summary>
-    /// Every <c>rgb()</c> and <c>rgba()</c> rewritten as hex.
-    ///
-    /// <para>Hex rather than merely unspaced, because taking the spaces out only fixes one of the
-    /// three callers. The filter parser matches functions with <c>([\w-]+)\(([^)]*)\)</c>, which
-    /// stops at the FIRST closing parenthesis, so <c>drop-shadow(0 0 4px rgba(0,0,0,0.5))</c>
-    /// hands the colour parser <c>rgba(0,0,0,0.5</c> whether or not it had spaces in it. And
-    /// <c>ParseGradient</c> takes everything between the first <c>(</c> and the last <c>)</c> of
-    /// the whole value, so a multi-layer <c>background: radial-gradient(…), rgba(…)</c> is read as
-    /// one gradient whose parentheses no longer balance.</para>
-    ///
-    /// <para>A hex colour has no parentheses, so none of the three can break it. The only loss is
-    /// the alpha, quantised from a fraction to eight bits - <c>0.32</c> becomes <c>52</c>, which
-    /// is <c>0.3216</c> - and the engine stores eight-bit alpha anyway.</para>
-    /// </summary>
-    private static string Unspace(string css) => SpacedColour.Replace(css, match =>
-        Hex(match.Groups["parts"].Value) ?? match.Value);
-
-    /// <summary>Null when the arguments are not three or four plain numbers - the modern
-    /// <c>rgb(255 0 0 / 50%)</c> form among them, which is left exactly as written rather than
-    /// half-understood.</summary>
-    private static string? Hex(string arguments)
-    {
-        var parts = arguments.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length is not (3 or 4)) return null;
-
-        Span<byte> channels = stackalloc byte[4];
-        channels[3] = 255;
-
-        for (var i = 0; i < parts.Length; i++)
-        {
-            if (!double.TryParse(parts[i], System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out var value)) return null;
-
-            // The first three are 0-255; the fourth is a 0-1 fraction.
-            //
-            // TRUNCATED, not rounded, because that is what the engine does to its own rgba():
-            // (byte)(0.65f * 255f) is 165, and the nearest value is 166. Rounding here made the
-            // rewritten colour one level off the one the browser is being compared against, and
-            // six text-heavy blocks lost two and a half points of score to it - which is a
-            // remarkable amount for a single level of alpha, and exactly the kind of thing that
-            // is invisible until two renders are put side by side.
-            channels[i] = (byte)Math.Clamp(i == 3 ? Math.Truncate(value * 255) : Math.Round(value), 0, 255);
-        }
-
-        var hex = $"#{channels[0]:x2}{channels[1]:x2}{channels[2]:x2}";
-        return channels[3] == 255 ? hex : hex + channels[3].ToString("x2");
-    }
-
-    private static readonly Regex InsetZero = new(
-        @"(?<![\w-])inset\s*:\s*0(?:px|%)?\s*(?=;|\})",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    /// <summary>
-    /// <c>inset: 0</c> written the long way, and sized rather than stretched.
-    ///
-    /// <para>115 blocks of 187 use it - the overlay, the backdrop, the end card that covers the
-    /// composition - and the engine reports <c>CF0050</c> and lays the element out with no size at
-    /// all, so the thing meant to cover everything covers nothing. It is the largest layout gap in
-    /// the corpus and it is invisible in a diff, which is how it survived until a frame comparison
-    /// put the two side by side.</para>
-    ///
-    /// <para>The obvious expansion - the four longhands - was written first and then measured, and
-    /// it does <em>not</em> work: the engine accepts <c>top/right/bottom/left</c> and still gives
-    /// the element no size. Percentage width and height do work. Both answers are in
-    /// <c>conformance/support/0.26.1.json</c>, which is the only reason this rule is the shape it
-    /// is rather than the shape it looked like it should be.</para>
-    ///
-    /// <para>Only the zero case is rewritten. <c>inset: 12px</c> would need a size of
-    /// <c>calc(100% - 24px)</c>, which is a different question and has not been measured; the
-    /// nineteen occurrences that are not zero are left alone rather than guessed at.</para>
-    /// </summary>
-    private static string Fill(string css) =>
-        InsetZero.Replace(css, "top:0;left:0;width:100%;height:100%");
 
     /// <summary>The compiled motion, last in the head so its rules win the ties.</summary>
     private static void Style(IHtmlDocument document, string css)

@@ -164,8 +164,12 @@ size**, and **`<template>` inlined**. What is left:
 
 And the compiler's own unfinished business, which the refusal counts rank:
 
-- **a tween of a property the engine cannot animate**, the largest single group. Nothing to rewrite
-  in most cases, but `backgroundColor` could cross-fade two stacked elements.
+- **reading an element's authored start value.** 112 compiled animations hold one value for their
+  whole length, because `.to(el, {opacity: 1})` on an element the stylesheet authors as
+  `opacity: 0` is a fade in a browser and a still here. This is the largest correctable gap, and it
+  needs the cascade resolved for one element without running the document.
+- **a tween of a property the engine cannot animate**, the largest single refusal group. Nothing to
+  rewrite in most cases, but `backgroundColor` could cross-fade two stacked elements.
 - **`.add()` of a nested timeline**, refused rather than flattened
 - **`repeat` and `stagger`**, both of which need more than one animation per element
 - **how dense the ease sampling should be.** Eight stops was a guess and is still a guess; the

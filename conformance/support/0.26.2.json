@@ -1,0 +1,341 @@
+{
+  "engine": "0.26.2",
+  "platform": "Win32NT",
+  "runtime": "10.0.10",
+  "measured": "2026-09-20T01:23:35.6630138+00:00",
+  "support": [
+    {
+      "property": "width",
+      "value": "120px -\u003E 400px",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "height",
+      "value": "80px -\u003E 160px",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "opacity",
+      "value": "0.25",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translateX(80px)",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "left",
+      "value": "80px",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "margin-left",
+      "value": "80px",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "background-color",
+      "value": "#d9642a -\u003E #3f6fd8",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "color",
+      "value": "#d9642a -\u003E #3f6fd8",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "inset(0 40% 0 0)",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027clip-path\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "filter",
+      "value": "blur(6px)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "brightness(0.4)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "backdrop-filter",
+      "value": "blur(6px)",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "mix-blend-mode",
+      "value": "difference",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027mix-blend-mode\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "display",
+      "value": "grid",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "rotateY(50deg)",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translate3d(60px,20px,0)",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "perspective",
+      "value": "400px",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027perspective\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "box-shadow",
+      "value": "0 10px 30px #000",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "text-shadow",
+      "value": "0 4px 8px #000",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027text-shadow\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "gap",
+      "value": "0 -\u003E 24px",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "align-self",
+      "value": "center",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027align-self\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "\u003Csvg\u003E",
+      "value": "inline rect",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0030: \u003Csvg\u003E is not something the engine draws \u2014 it lays out, and then stays empty."
+      ]
+    },
+    {
+      "property": "letter-spacing",
+      "value": "12px",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027letter-spacing\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "line-height",
+      "value": "72px",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "repeating-linear-gradient",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "linear-gradient",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border-left",
+      "value": "8px solid",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r, g, b, a)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r,g,b,a)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (shorthand)",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027inset\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "inset",
+      "value": "0 (four longhands)",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (percent size)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "descendant (.box .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "id (#p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "compound (.p.q)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "child (.box \u003E .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "animation via descendant",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "animation",
+      "value": "beats a static declaration",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "fractional percentages",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "many stops",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "text colour, alpha 0.65",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "truncated alpha, should match",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "background, alpha 0.65",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "animation-delay",
+      "value": "calc(var(--d) \u002B 0.5s)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    }
+  ]
+}

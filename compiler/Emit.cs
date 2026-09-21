@@ -10,8 +10,15 @@ public readonly record struct Stop(double Time, double Number, string Unit);
 /// <param name="Css">Ready to drop into a <c>&lt;style&gt;</c>.</param>
 /// <param name="Seconds">How long the motion runs. Not always the block's declared duration.</param>
 /// <param name="Elements">How many selectors ended up with an animation, for the report.</param>
+/// <param name="Selectors">Every selector given an animation rule, held apart from
+/// <paramref name="Elements"/> so the translator can check them all against the document it is
+/// about to emit: a target is resolved from the source alone and never by looking at the document,
+/// so nothing upstream of here knows whether one matches anything.</param>
+/// <param name="Held">How many of those animations hold one value for their whole length. They are
+/// emitted because their end state is load-bearing, and they are not motion.</param>
 public sealed record Sheet(
-    string Css, double Seconds, int Elements, IReadOnlyList<Refusal> Refusals);
+    string Css, double Seconds, int Elements, IReadOnlyList<Refusal> Refusals,
+    IReadOnlyList<string> Selectors, int Held);
 
 /// <summary>
 /// Tweens into one <c>@keyframes</c> per element.
@@ -45,7 +52,7 @@ public static class Emit
         var refusals = carried.ToList();
         var tracks = Thread(tweens, refusals);
 
-        if (tracks.Count == 0) return new Sheet("", 0, 0, refusals);
+        if (tracks.Count == 0) return new Sheet("", 0, 0, refusals, [], 0);
 
         var seconds = tracks.Values
             .SelectMany(byProperty => byProperty.Values)
@@ -56,8 +63,9 @@ public static class Emit
 
         var css = new StringBuilder();
         var animations = new StringBuilder();
+        var animated = new List<string>();   // selectors whose values actually change
+        var emitted = new List<string>();    // every selector given an animation rule
         var index = 0;
-        var animated = 0;
 
         foreach (var (selector, properties) in tracks)
         {
@@ -71,14 +79,40 @@ public static class Emit
                 continue;
             }
 
+            // Stops at several times and the same value at every one of them: the tween ended
+            // where the compiler believed it started. That nearly always means the element's own
+            // stylesheet gives it a starting transform or opacity, which GSAP reads from the
+            // computed style and a compiler that never runs the document cannot.
+            //
+            // It is emitted anyway, and that is not the obvious call. It was removed first, on the
+            // grounds that a no-op spends the element's one animation and counts as carried motion
+            // in every report. The corpus disagreed immediately: flowchart-vertical fell from 97.9%
+            // to 0.9%. These elements are authored hidden - opacity: 0 in the stylesheet, revealed
+            // by the script - so the flat animation is wrong about the MOTION and right about the
+            // END STATE, and with `both` it holds the element visible for the whole composition.
+            // Removing it left every one of them invisible.
+            //
+            // So: emitted, reported, and not counted as motion. All three are needed.
+            var still = !properties.Values.Any(Varies);
+
+            if (still)
+                refusals.Add(new Refusal(
+                    $"'{selector}' is held at its end state rather than animated: every stop has "
+                    + "the same value, because the tween ends where the compiler assumed it began. "
+                    + "The element's own stylesheet is setting a start that cannot be read without "
+                    + "running the document."));
+
             var name = "cuprilex-" + ++index;
             css.Append(Keyframes(name, properties, seconds));
             animations.Append(
                 $"{selector} {{ animation: {name} {Number(seconds)}s linear both; }}\n");
-            animated++;
+
+            emitted.Add(selector);
+            if (!still) animated.Add(selector);
         }
 
-        return new Sheet(css.Append(animations).ToString(), seconds, animated, refusals);
+        return new Sheet(css.Append(animations).ToString(), seconds, animated.Count,
+            refusals, emitted, animated.Count == emitted.Count ? 0 : emitted.Count - animated.Count);
     }
 
     // ---- threading ----------------------------------------------------------------------------
@@ -159,6 +193,12 @@ public static class Emit
 
         return tracks;
     }
+
+    /// <summary>Whether a property's stops hold more than one value. A tolerance rather than an
+    /// equality test, because the stops between the ends of an eased tween are sampled off a curve
+    /// and arrive as fractions.</summary>
+    private static bool Varies(List<Stop> stops) =>
+        stops.Count > 1 && stops.Max(s => s.Number) - stops.Min(s => s.Number) > 1e-6;
 
     private static List<Stop> Track(
         Dictionary<string, Dictionary<string, List<Stop>>> tracks, string selector, string component)

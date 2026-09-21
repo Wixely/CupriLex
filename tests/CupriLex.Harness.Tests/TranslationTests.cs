@@ -57,70 +57,28 @@ public class TranslationTests : IDisposable
 
     // ---- rewrites ----------------------------------------------------------------------------
 
-    /// <summary>An <c>rgba()</c> becomes hex, because the engine crashes on the parenthesised
-    /// form in three different parsers and a hex colour has no parentheses to break. Measured,
-    /// not assumed - see <c>EngineBugTests</c> and the conformance matrix.</summary>
-    [Fact]
-    public void An_rgba_colour_becomes_hex()
-    {
-        var html = Translate("<style>.c { border: 1px solid rgba(198, 173, 144, 0.32); }</style>");
-
-        Assert.Contains("#c6ad9051", html);
-        Assert.DoesNotContain("rgba(", html);
-    }
-
     /// <summary>
-    /// The alpha is truncated, not rounded, because that is what the engine does to its own
-    /// <c>rgba()</c>: <c>(byte)(0.32f * 255f)</c> is 81, and the nearest value is 82.
+    /// Colours and <c>inset</c> come through exactly as written.
     ///
-    /// <para>Rounding cost six text-heavy blocks two and a half points of corpus score each -
-    /// a remarkable amount for one level of alpha, and invisible in anything but a frame
-    /// comparison. The conformance matrix holds both halves of the pair.</para>
+    /// <para>Both used to be rewritten, and both rules are gone. A spaced <c>rgba()</c> crashed
+    /// CupriFace through 0.26.1 from three different parsers, so every colour was converted to
+    /// hex; <c>inset: 0</c> was ignored and gave a full-bleed overlay no size, so it was expanded
+    /// to a percentage size. 0.26.2 fixed the first and 0.27.0 the second, which makes both
+    /// rewrites output that differs from what the author wrote for no reason.</para>
+    ///
+    /// <para>The conformance matrix is the evidence, and the flipped tests in
+    /// <c>EngineBugTests</c> are the guard. This test is here so the rules cannot creep back.</para>
     /// </summary>
-    [Fact]
-    public void The_alpha_is_truncated_the_way_the_engine_truncates_it()
-    {
-        Assert.Contains("#e6edf3a5",
-            Translate("<style>.c { color: rgba(230, 237, 243, 0.65); }</style>"));
-    }
-
-    [Fact]
-    public void An_opaque_rgb_becomes_six_hex_digits_rather_than_eight()
-    {
-        Assert.Contains("#c6ad90", Translate("<style>.c { color: rgb(198, 173, 144); }</style>"));
-    }
-
-    /// <summary>The modern space-separated form is left exactly as written: half-understanding it
-    /// would be worse than not touching it.</summary>
-    [Fact]
-    public void The_slash_form_of_rgb_is_left_alone()
-    {
-        Assert.Contains("rgb(255 0 0 / 50%)",
-            Translate("<style>.c { color: rgb(255 0 0 / 50%); }</style>"));
-    }
-
-    /// <summary>115 blocks of 187 use <c>inset: 0</c> and the engine ignores it, so the overlay
-    /// that should cover the composition has no size at all. The four longhands do not fix it -
-    /// that was measured, and it was the obvious answer - but a percentage size does.</summary>
-    [Fact]
-    public void Inset_zero_becomes_a_percentage_size_rather_than_the_four_longhands()
-    {
-        var html = Translate("<style>.overlay { position: absolute; inset: 0; }</style>");
-
-        Assert.Contains("width:100%", html);
-        Assert.Contains("height:100%", html);
-        Assert.DoesNotContain("inset:0", html.Replace(" ", ""));
-    }
-
-    /// <summary>Only the zero case. <c>inset: 12px</c> would need a size of
-    /// <c>calc(100% - 24px)</c>, which has not been measured against the engine.</summary>
-    [Fact]
-    public void A_non_zero_inset_is_left_alone_rather_than_guessed_at()
-    {
-        var html = Translate("<style>.overlay { position: absolute; inset: 12px; }</style>");
-
-        Assert.Contains("inset: 12px", html);
-    }
+    [Theory]
+    [InlineData("<style>.c { border: 1px solid rgba(198, 173, 144, 0.32); }</style>",
+        "rgba(198, 173, 144, 0.32)")]
+    [InlineData("<style>.c { color: rgb(198, 173, 144); }</style>", "rgb(198, 173, 144)")]
+    [InlineData("<style>.c { color: rgb(255 0 0 / 50%); }</style>", "rgb(255 0 0 / 50%)")]
+    [InlineData("<style>.overlay { position: absolute; inset: 0; }</style>", "inset: 0")]
+    [InlineData("<style>.overlay { position: absolute; inset: 12px; }</style>", "inset: 12px")]
+    public void A_declaration_the_engine_now_understands_is_left_exactly_as_written(
+        string body, string expected) =>
+        Assert.Contains(expected, Translate(body));
 
     /// <summary>The content of a template is inert until a host clones it in, and the engine is
     /// not a host. Thirteen blocks put their whole composition inside one.</summary>

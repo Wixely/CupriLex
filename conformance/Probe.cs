@@ -1,5 +1,6 @@
 using CupriFace;
 using CupriFace.Diagnostics;
+using CupriFace.Svg;
 using SkiaSharp;
 
 namespace CupriLex.Conformance;
@@ -119,7 +120,8 @@ public static class Probe
         {
             // "" and not null: a null stylesheet turned every CSS check off through 0.25.0, and
             // passing it explicitly is a habit worth keeping.
-            return [.. CupriDoctor.Check(html, string.Empty, width: Width, height: Height).Findings
+            return [.. CupriDoctor.Check(html, string.Empty, width: Width, height: Height,
+                    configure: document => document.UseSvg()).Findings
                 .Where(f => f.Message.Contains(name, StringComparison.OrdinalIgnoreCase))
                 .Select(f => $"{f.Code}: {f.Message}")];
         }
@@ -139,6 +141,11 @@ public static class Probe
         {
             using var doc = CupriDocument.Load(html, null);
             doc.UseComponents(CupriFace.Components.ComponentRegistry.Default());
+
+            // The optional packages this repository actually renders with, so the matrix measures
+            // the engine as it is used rather than a stripped-down one. <svg> draws only for a
+            // document that has asked for it.
+            doc.UseSvg();
 
             if (FontDirectory is { Length: > 0 } dir && Directory.Exists(dir))
                 doc.LoadFonts(dir, recursive: true);

@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(CupriFaceVersion)' == ''">
-    <CupriFaceVersion>0.26.1</CupriFaceVersion>
+    <CupriFaceVersion>0.27.0</CupriFaceVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +24,9 @@
       SkiaSharp is pinned to the engine's own, because SKImage crosses the boundary.
     -->
     <PackageReference Include="CupriFace" Version="$(CupriFaceVersion)" />
+    <!-- Optional, and 32% of the corpus needs it: inline <svg> draws only when a
+         document calls UseSvg(). Pinned to the engine, which is what defines it. -->
+    <PackageReference Include="CupriFace.Svg" Version="$(CupriFaceVersion)" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
   </ItemGroup>
 

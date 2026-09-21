@@ -1,6 +1,7 @@
 using CupriFace;
 using CupriFace.Components;
 using CupriFace.Diagnostics;
+using CupriFace.Svg;
 
 namespace CupriLex.Harness;
 
@@ -31,6 +32,11 @@ public static class Engine
         using var document = CupriDocument.Load(html);
         document.UseComponents(ComponentRegistry.Default());
 
+        // Inline <svg> draws only for a document that asks for it, and 61 of the 187 blocks have
+        // one - logos, icons, a progress ring, the lines of a diagram. Without this call they lay
+        // out and stay empty, which is what they did through every measurement before 0.27.0.
+        document.UseSvg();
+
         if (fontDirectory is { Length: > 0 } fonts && Directory.Exists(fonts))
             document.LoadFonts(fonts, recursive: true);
 
@@ -58,7 +64,12 @@ public static class Engine
         {
             // "" and not null for the stylesheet: a null one turned every CSS check off through
             // 0.25.0, and passing it explicitly is a habit worth keeping.
-            return [.. CupriDoctor.Check(html, string.Empty, width: block.Width, height: block.Height).Findings
+            //
+            // configure: the same packages the render uses, or the checker builds a document with
+            // none of them and reports markup as undrawable that this harness draws perfectly
+            // well. It is the same mistake as checking one document and rendering another.
+            return [.. CupriDoctor.Check(html, string.Empty, width: block.Width, height: block.Height,
+                    configure: document => document.UseSvg()).Findings
                 .GroupBy(f => f.Code)
                 .OrderByDescending(g => g.Count())
                 .Select(g => $"{g.Key} x{g.Count()}: {g.First().Message}")];

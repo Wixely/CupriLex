@@ -101,10 +101,16 @@ Run `reach` for the current numbers. At the time of writing:
 
 ```
 187 blocks
- 84 carry at least one animated element (45%)
-632 elements animated in total, median 4 per block
-1230 refusals, 2751 motion calls in the source
+ 67 carry at least one animated element (36%)
+520 elements animated in total, median 4 per block
+1370 refusals, 2751 motion calls in the source
+112 more are held at their end state rather than animated
+ 28 animation(s) across 7 block(s) land on a selector that matches nothing
 ```
+
+Those last two lines were added after the fact, and the first line was a fifth higher before they
+existed. Both are cases where the compiler did its job and the frame still cannot show it, which
+reads as a complete translation and renders as a still.
 
 The refusals are grouped by cause with examples quoted from the source, because a count says how
 big a problem is and an example says what to do about it. The largest groups are properties the
@@ -115,46 +121,69 @@ JavaScript to run the callback.
 **Reach is not the score.** Frames decide the score, and a block whose every tween was read can
 still render wrongly. What it was worth, against the browser:
 
-| | before the compiler | after |
-|---|---|---|
-| blocks scored | 150 of 187 | **183 of 187** |
-| mean matching, over blocks whose reference moves | 55.2% | **62.8%** |
-| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 |
+| | before the compiler | with it, on 0.26.1 | on 0.27.0 |
+|---|---|---|---|
+| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** |
+| mean matching, over blocks whose reference moves | 55.2% | 62.8% | **62.7%** |
+| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 |
 
-So 38 blocks now animate, 33 more can be loaded at all, and the number the project is steered by
-moved seven and a half points. The two halves are not separable: the rewrites made 33 blocks
-measurable *and* the measurement is what found the rewrites. See [HARNESS.md](HARNESS.md).
+38 blocks animate where none did. The engine upgrade added two more scorable blocks and left the
+mean where it was, which is itself worth knowing: on the 183 blocks scored in both runs the mean
+moved 67.1% to 67.3%, 15 blocks improved by about three points each and two lost under two. The
+remaining error is not in the features that were fixed. See [HARNESS.md](HARNESS.md).
 
 ---
 
-## Three rewrites that came out of running it
+## Two ways a translation can be complete and still show nothing
 
-Each is a Milestone 4 rule pulled forward, because each was blocking the measurement of the
-compiler rather than merely improving on it. Every one has a measured condition in
-`conformance/support/0.26.1.json`, and each should be **deleted** when the engine no longer needs
-it — `EngineBugTests` fails on that day and says so.
+Both were found by asking why 47 blocks carried compiled motion and rendered an identical frame at
+every sample, which was more blocks than the 38 that moved.
 
-**Colours to hex.** `rgba(198, 173, 144, 0.32)` crashes CupriFace 0.26.1 in three different
-parsers, and 35 blocks could not be loaded at all. The fault is one function, `Colors.TryParse`,
-which takes the text between parentheses and gets a length of -6 when there is no closing one;
-three callers hand it a fragment that has none. The first version of this rule took the spaces out
-of colours inside `border` declarations, which recovered 25 blocks and left 10 — the rest were in
-gradient layers and a `drop-shadow()`, and the `drop-shadow` one crashes with or without spaces
-because the filter parser's own regular expression stops at the first `)`. A hex colour has no
-parentheses at all, which is why the rule is the shape it is.
+**The selector matches nothing.** Resolution never consults the document, which is what makes it
+static and what makes it impossible for the compiler to be wrong about which elements it meant. The
+cost is that a selector naming an element the script was going to build resolves perfectly and then
+finds nothing, and the rule is emitted valid and inert. 28 animations across 7 blocks do this.
+`chatgpt-exchange` is the clearest case: all twelve of its animations land on elements that do not
+exist in the static document. Checking this is verification rather than resolution, so it happens
+once at the end against the document about to be written, and it is reported by name.
 
-The alpha is **truncated, not rounded**, because that is what the engine does to its own `rgba()`:
-`(byte)(0.65f * 255f)` is 165, and the nearest value is 166. Rounding cost six text-heavy blocks
-two and a half points of score each — a remarkable amount for one level of alpha out of 255, and
-completely invisible until two renders were put side by side. The conformance matrix holds both
-halves of that pair, the rounded hex that differs from `rgba()` and the truncated one that does
-not.
+**The tween ends where the compiler assumed it began.** `.to(el, { opacity: 1 })` is a real fade in
+a browser when the stylesheet authors that element as `opacity: 0`, because GSAP reads the computed
+style. The compiler cannot, so it assumes the resting value and emits a `@keyframes` holding 1
+throughout. 112 of what the reach report used to call animated elements were this.
 
-**`inset: 0` to a percentage size.** 115 blocks of 187 use it and the engine ignores it, so the
-overlay meant to cover the composition has no size. The obvious expansion — the four longhands —
-was written first and then measured, and it does **not** work: the engine accepts
-`top/right/bottom/left` and still gives the element no size. `width: 100%; height: 100%` does work.
-Both answers are in the matrix, and that measurement is the only reason the rule is right.
+Deleting those as no-ops is the obvious cleanup. It is also wrong, and the corpus said so within a
+minute: `flowchart-vertical` fell from **97.9% to 0.9%**. The flat animation is wrong about the
+motion and right about the **end state**, and with `both` it is the only thing holding those
+elements visible at all. Every one of them is authored hidden and revealed by the script.
+
+So they are emitted, reported, and not counted as motion. The real fix is to read the element's
+authored value, which means resolving the cascade for one element without running the document.
+That has not been attempted.
+
+---
+
+## The rewrites that came out of running it, and the two that are already gone
+
+Three rules were pulled forward from Milestone 4 because each was blocking the *measurement* of the
+compiler rather than merely improving on it. Each declared the engine behaviour it worked around,
+each condition went into the conformance matrix, and each was pinned by a test built to fail when
+the engine stopped needing it.
+
+Two of those tests have now failed, which is the system working:
+
+- **Colours to hex** worked around a crash reachable from three parsers that cost 35 blocks their
+  score entirely. Fixed in **CupriFace 0.26.2**. Rule deleted.
+- **`inset: 0` to a percentage size** worked around an overlay with no size, at 115 blocks of 187.
+  Fixed in **0.27.0**, including the deeper half where the four longhands were accepted and sized
+  to nothing. Rule deleted.
+
+Both were reported upstream and both were fixed there, which is a better outcome than either rule:
+the engine now renders what the author wrote, and this repository emits it unchanged. What the
+exercise cost while it lasted is written up in [TRANSLATION.md](TRANSLATION.md), because the route
+to each was wrong twice before it was right.
+
+One rewrite remains.
 
 **`<template>` inlined.** 13 blocks put the whole composition inside one, scripts included, and
 template content is inert in any browser until a host clones it in.

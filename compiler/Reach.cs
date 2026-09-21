@@ -18,7 +18,7 @@ public static class Reach
         var files = CorpusPath.Files().ToArray();
         if (limit > 0) files = [.. files.Take(limit)];
 
-        var rows = new List<(string Block, int Animated, double Seconds, int Refusals, int Calls)>();
+        var rows = new List<(string Block, int Animated, double Seconds, int Refusals, int Calls, int Unmatched, int Held)>();
         var reasons = new Dictionary<string, int>();
         var examples = new Dictionary<string, List<string>>();
 
@@ -35,13 +35,19 @@ public static class Reach
             }
             catch (Exception ex)
             {
-                rows.Add((name, 0, 0, 0, 0));
+                rows.Add((name, 0, 0, 0, 0, 0, 0));
                 Count(reasons, "the compiler threw: " + ex.GetType().Name);
                 continue;
             }
 
+            // Counted separately because it is the one refusal that says the compiler did its job
+            // and the result still cannot show: a correct animation on a selector that finds
+            // nothing, because the element was built by the script that has been removed.
+            var landsOnNothing = translated.Refusals.Count(
+                r => r.What.Contains("matches no element", StringComparison.Ordinal));
+
             rows.Add((name, translated.Motion.Elements, translated.Motion.Seconds,
-                translated.Refusals.Count, Calls(html)));
+                translated.Refusals.Count, Calls(html), landsOnNothing, translated.Motion.Held));
 
             foreach (var refusal in translated.Refusals)
             {
@@ -60,7 +66,7 @@ public static class Reach
         if (Option(args, "--json") is { Length: > 0 } path)
         {
             System.IO.File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(
-                rows.Select(r => new { r.Block, r.Animated, r.Seconds, r.Refusals, r.Calls }),
+                rows.Select(r => new { r.Block, r.Animated, r.Seconds, r.Refusals, r.Calls, r.Unmatched, r.Held }),
                 new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine();
             Console.WriteLine("wrote " + path);
@@ -86,7 +92,7 @@ public static class Reach
         into[key] = into.TryGetValue(key, out var seen) ? seen + 1 : 1;
 
     private static void Print(
-        List<(string Block, int Animated, double Seconds, int Refusals, int Calls)> rows,
+        List<(string Block, int Animated, double Seconds, int Refusals, int Calls, int Unmatched, int Held)> rows,
         Dictionary<string, int> reasons,
         Dictionary<string, List<string>> examples)
     {
@@ -103,6 +109,20 @@ public static class Reach
             Console.WriteLine($"{rows.Sum(r => r.Refusals)} refusals, "
                               + $"{rows.Sum(r => r.Calls)} motion calls in the source");
         }
+
+        // Two lines of their own, because both are cases where the compiler did its job and the
+        // frame still cannot show it. Every other refusal says something was not carried; these
+        // two read as a complete translation and render as a still, which is the harder failure to
+        // notice and the reason the line above them used to be overstated by a fifth.
+        var held = rows.Sum(r => r.Held);
+        if (held > 0)
+            Console.WriteLine($"{held} more are held at their end state rather than animated: the "
+                              + "tween ends where the compiler assumed it began");
+
+        var blind = rows.Where(r => r.Unmatched > 0).ToArray();
+        if (blind.Length > 0)
+            Console.WriteLine($"{blind.Sum(r => r.Unmatched)} animation(s) across {blind.Length} "
+                              + "block(s) land on a selector that matches nothing");
 
         Console.WriteLine();
         Console.WriteLine("what is refused, by cause");

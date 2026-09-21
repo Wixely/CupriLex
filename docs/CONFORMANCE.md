@@ -56,6 +56,40 @@ nothing is not. The three columns are the whole point.
 
 ---
 
+## What it produced the first time it was used in anger
+
+The design above was written before any version bump had happened to this repository. One has now,
+and it did the thing it was built for: **`git diff conformance/support/` deleted two rewrite
+rules.**
+
+```
+dotnet run --project conformance -- --compare conformance/support/0.26.2.json conformance/support/0.27.0.json
+
+  backdrop-filter (blur(6px)) parses: yes -> NO
+  letter-spacing (12px) parses: NO -> yes
+  letter-spacing (12px) paints: NO -> yes
+  inset (0 (shorthand)) parses: NO -> yes
+  inset (0 (shorthand)) paints: NO -> yes
+  inset (0 (four longhands)) paints: NO -> yes
+```
+
+Read those six lines as three facts. `letter-spacing` went from ignored to implemented, and it is
+80% of the corpus. `inset` went from ignored to supported, **and so did the four longhands**, which
+is the half that a rewrite rule was standing in for. And `backdrop-filter` moved the other way in
+the parse column, which is an improvement: it now reports why it is not drawing instead of
+accepting the declaration in silence.
+
+Across 0.26.1 to 0.27.0 the matrix took the repository from three rewrite rules to one. Each rule
+had declared the condition it worked around; each condition stopped being true; the tests pinning
+them failed on cue and the rules were deleted. That is the whole mechanism working end to end, and
+none of it required reading a changelog.
+
+The one thing the matrix could not do on its own: an optional package. `<svg>` reads as unsupported
+until the probe calls `UseSvg()`, because that is also true of any document that does not. The
+probe now enables the same packages the harness renders with, and the matrix says so.
+
+---
+
 ## How a translator uses it
 
 Every rewrite rule declares what it is working around:

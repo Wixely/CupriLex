@@ -78,11 +78,11 @@ Measured against **CupriFace 0.26.1** by `conformance/` — see
 | | blocks | CupriFace 0.26.1 |
 |---|---|---|
 | `position: absolute` | 187 — 100% | **works** |
-| `letter-spacing` | **150 — 80%** | **ignored** (`CF0050`). Four in five blocks lose their tracking. |
+| `letter-spacing` | **150 — 80%** | **works** — as of 0.27.0. It was ignored until then, and four in five blocks lost their tracking. |
 | `line-height` | 112 — 59% | **works** — as of 0.25.1; badly broken before it |
 | `var()` | 73 — 39% | **works**, fallbacks included |
-| `<svg>` | **61 — 32%** | **NOT rendered.** The single largest gap. |
-| 3D transforms | **54 — 28%** | **NOT rendered** — `rotateY`, `translate3d` and `perspective` all paint nothing |
+| `<svg>` | **61 — 32%** | **works** — as of 0.27.0, through the optional `CupriFace.Svg` package and a `UseSvg()` call. Shapes become real paths; gradients, `<text>` and `<use>` do not. |
+| 3D transforms | **54 — 28%** | **NOT rendered** — `rotateY`, `translate3d` and `perspective` all paint nothing. Reported as `CF0051` since 0.27.0, where before they were accepted in silence. |
 | external font | 44 — 23% | download and embed as `@font-face` with a `data:` URI — **works** |
 | `clip-path` | **40 — 21%** | **NOT rendered** |
 | `<canvas>` | **38 — 20%** | drawn by JavaScript. Untranslatable — name it and refuse. |

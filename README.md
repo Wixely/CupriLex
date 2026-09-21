@@ -67,16 +67,21 @@ dotnet run --project harness -- --all
 On CupriFace 0.26.1, before and after the GSAP compiler — see
 [docs/HARNESS.md](docs/HARNESS.md) and [docs/COMPILER.md](docs/COMPILER.md):
 
-| | baseline | with the compiler |
-|---|---|---|
-| blocks scored | 150 of 187 | **183 of 187** |
-| mean matching, over blocks whose reference moves | 55.2% | **62.8%** |
-| blocks that rendered the same frame at every time | **150 of 150** | 145 of 183 |
-| unmeasurable because the engine threw on the document | 35 | 2 |
+| | baseline | with the compiler | on CupriFace 0.27.0 |
+|---|---|---|---|
+| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** |
+| mean matching, over blocks whose reference moves | 55.2% | 62.8% | **62.7%** |
+| blocks that rendered the same frame at every time | **150 of 150** | 145 of 183 | 147 of 185 |
+| unmeasurable because the engine threw on the document | 35 | 2 | **0** |
 
-38 blocks now animate. The mean is not a like-for-like comparison, because the 33 blocks that could
-not previously be loaded at all are now in the population and they score below average — which is
-the honest reason the headline moved less than the work did.
+38 blocks now animate. The mean is not a like-for-like comparison, because the blocks that could not
+previously be loaded at all are now in the population and they score below average — which is the
+honest reason the headline moved less than the work did.
+
+**0.27.0 closed three gaps this repository had reported and deleted two of its own rewrite rules.**
+`letter-spacing`, `inset` and inline `<svg>` all work now. The corpus score barely moved, which
+says where the remaining error actually is: not in those features, but in motion the compiler
+cannot resolve.
 
 ---
 

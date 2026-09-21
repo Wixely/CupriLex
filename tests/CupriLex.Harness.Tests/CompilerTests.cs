@@ -260,6 +260,77 @@ public class CompilerTests
         Assert.Contains(compiled.Refusals, r => r.What.Contains("stagger", StringComparison.Ordinal));
     }
 
+    // ---- carried, and still not visible --------------------------------------------------------
+
+    /// <summary>
+    /// An animation whose selector matches nothing in the document is reported.
+    ///
+    /// <para>Resolution never consults the document, which is what makes it static. The cost is
+    /// that a selector naming an element the script was going to build resolves perfectly and then
+    /// matches nothing, and the rule is emitted valid and inert. 28 animations across 7 corpus
+    /// blocks do exactly this; one of them, <c>chatgpt-exchange</c>, has all twelve of its
+    /// animations land on nothing.</para>
+    /// </summary>
+    [Fact]
+    public void An_animation_on_a_selector_that_matches_nothing_is_reported()
+    {
+        var compiled = Translator.Of("""
+            <html><body><div class="present"></div><script>
+              gsap.timeline().to(".built-by-the-script", { x: 100, duration: 1 });
+            </script></body></html>
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("matches no element", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_animation_whose_selector_does_match_is_not_reported()
+    {
+        var compiled = Compile("""gsap.timeline().to(".a", { x: 100, duration: 1 });""");
+
+        Assert.DoesNotContain(compiled.Refusals,
+            r => r.What.Contains("matches no element", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A tween that ends where the compiler assumed it began is reported, and emitted anyway.
+    ///
+    /// <para>Both halves are load-bearing and the second one is counter-intuitive. <c>.to(el,
+    /// {opacity: 1})</c> on an element the stylesheet authors as <c>opacity: 0</c> is a real fade
+    /// in a browser, because GSAP reads the computed style; the compiler assumes the resting value
+    /// and produces a keyframes that holds 1 throughout. Deleting those as no-ops was the obvious
+    /// cleanup and it took <c>flowchart-vertical</c> from 97.9% to 0.9%: the flat animation is
+    /// wrong about the motion and right about the END STATE, and with <c>both</c> it is the only
+    /// thing keeping the element visible.</para>
+    ///
+    /// <para>So it is emitted, reported, and not counted as motion.</para>
+    /// </summary>
+    [Fact]
+    public void A_tween_that_ends_where_it_began_is_reported_but_still_emitted()
+    {
+        var compiled = Compile("""gsap.timeline().to(".a", { opacity: 1, duration: 1 });""");
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("held at its end state", StringComparison.Ordinal));
+
+        Assert.Contains("@keyframes", compiled.Motion.Css);
+        Assert.Contains("opacity: 1;", compiled.Motion.Css);
+        Assert.Equal(1, compiled.Motion.Held);
+        Assert.Equal(0, compiled.Motion.Elements);
+    }
+
+    [Fact]
+    public void A_tween_that_actually_moves_counts_as_motion_and_is_not_reported()
+    {
+        var compiled = Compile("""gsap.timeline().to(".a", { opacity: 0, duration: 1 });""");
+
+        Assert.Equal(1, compiled.Motion.Elements);
+        Assert.Equal(0, compiled.Motion.Held);
+        Assert.DoesNotContain(compiled.Refusals,
+            r => r.What.Contains("held at its end state", StringComparison.Ordinal));
+    }
+
     // ---- the document ------------------------------------------------------------------------
 
     [Fact]

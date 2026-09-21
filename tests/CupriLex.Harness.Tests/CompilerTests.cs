@@ -195,6 +195,50 @@ public class CompilerTests
         Assert.Contains("translateX(100px)", css);
     }
 
+    /// <summary>
+    /// An overshoot written into the ease is used, rather than GSAP's default.
+    ///
+    /// <para>44 corpus blocks write a parameterised ease and <c>back.out</c> dominates, with
+    /// overshoots from 1.04 to 3. Every one of them used to be sampled with 1.70158, which at
+    /// either end of that range is a visibly different curve - and the wrongness sits in the
+    /// middle of a tween, which is where a frame comparison is least forgiving.</para>
+    /// </summary>
+    [Fact]
+    public void A_back_ease_uses_the_overshoot_it_was_given()
+    {
+        var gentle = Css("""gsap.timeline().to(".a", { x: 100, duration: 1, ease: "back.out(1.1)" });""");
+        var violent = Css("""gsap.timeline().to(".a", { x: 100, duration: 1, ease: "back.out(3)" });""");
+
+        Assert.NotEqual(gentle, violent);
+
+        // A back.out overshoots its target and settles back, so some stop must exceed 100px, and
+        // the bigger overshoot must exceed it by more.
+        Assert.True(Peak(violent) > Peak(gentle) + 1,
+            $"overshoot 3 peaked at {Peak(violent):0.#}px and overshoot 1.1 at {Peak(gentle):0.#}px");
+    }
+
+    /// <summary>Every use of <c>steps()</c> in the corpus is <c>steps(1)</c>: hold the start value
+    /// for the whole tween, then snap. Sampled as a curve it was a straight slide.</summary>
+    [Fact]
+    public void A_steps_ease_holds_and_snaps_rather_than_sliding()
+    {
+        var css = Css("""gsap.timeline().to(".a", { x: 100, duration: 1, ease: "steps(1)" });""");
+
+        // Nothing between the ends: every stop is at one end or the other.
+        var values = System.Text.RegularExpressions.Regex.Matches(css, @"translateX\(([\d.]+)px\)")
+            .Select(m => double.Parse(m.Groups[1].Value,
+                System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.All(values, v => Assert.True(v < 0.01 || v > 99.99, $"a stop landed at {v}px"));
+    }
+
+    private static double Peak(string css) =>
+        System.Text.RegularExpressions.Regex.Matches(css, @"translateX\(([\d.]+)px\)")
+            .Select(m => double.Parse(m.Groups[1].Value,
+                System.Globalization.CultureInfo.InvariantCulture))
+            .DefaultIfEmpty(0)
+            .Max();
+
     private static int Stops(string css) => css.Count(c => c == '%');
 
     // ---- what is refused, and named -----------------------------------------------------------

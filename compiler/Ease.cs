@@ -21,13 +21,14 @@ public static class Ease
     /// put it - the honest way to choose it is against the comparison harness.</summary>
     public const int Samples = 8;
 
+    /// <summary>GSAP's own default overshoot, used when <c>back</c> is written without one.</summary>
     private const double BackOvershoot = 1.70158;
 
-    /// <summary>The curves this knows. Anything else runs linear and says so.</summary>
+    /// <summary>The curves this knows. Anything else runs linear and is reported.</summary>
     private static readonly HashSet<string> Known =
     [
         "none", "linear", "power0", "power1", "power2", "power3", "power4",
-        "quad", "cubic", "quart", "quint", "strong", "sine", "expo", "circ", "back",
+        "quad", "cubic", "quart", "quint", "strong", "sine", "expo", "circ", "back", "steps",
     ];
 
     public static bool Recognised(string ease) => Known.Contains(Family(ease));
@@ -37,6 +38,26 @@ public static class Ease
     public static bool IsLinear(string ease) =>
         Family(ease) is "none" or "linear" or "power0" || !Recognised(ease);
 
+    /// <summary>The number inside the parentheses, where there is one: the overshoot of
+    /// <c>back.out(1.4)</c>, the count of <c>steps(4)</c>. 44 blocks of the corpus write one, with
+    /// back's overshoot ranging from 1.04 to 3 - and this used to ignore all of them and use
+    /// GSAP's default of 1.70158, which is a visibly different curve at either end of that
+    /// range.</summary>
+    private static double? Parameter(string ease)
+    {
+        var open = ease.IndexOf('(');
+        if (open < 0) return null;
+
+        var close = ease.IndexOf(')', open);
+        var inside = close < 0 ? ease[(open + 1)..] : ease[(open + 1)..close];
+
+        // elastic.out(1, 0.4) has two; the first is the one these curves take.
+        var first = inside.Split(',')[0].Trim();
+
+        return double.TryParse(first, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
     /// <summary>Eased progress, for a linear progress from 0 to 1.</summary>
     public static double Of(string ease, double p)
     {
@@ -44,6 +65,17 @@ public static class Ease
 
         var family = Family(ease);
         var direction = Direction(ease);
+        var parameter = Parameter(ease);
+
+        // A staircase rather than a curve, and not a function of direction at all. Every use in
+        // the corpus is steps(1), which holds the start value and snaps at the end.
+        if (family == "steps")
+        {
+            var count = Math.Max(1, (int)Math.Round(parameter ?? 1));
+            return Math.Min(1, Math.Floor(p * count) / count);
+        }
+
+        var overshoot = parameter ?? BackOvershoot;
 
         double In(double x) => family switch
         {
@@ -54,7 +86,7 @@ public static class Ease
             "sine" => 1 - Math.Cos(x * Math.PI / 2),
             "expo" => x == 0 ? 0 : Math.Pow(2, 10 * x - 10),
             "circ" => 1 - Math.Sqrt(1 - x * x),
-            "back" => (BackOvershoot + 1) * x * x * x - BackOvershoot * x * x,
+            "back" => (overshoot + 1) * x * x * x - overshoot * x * x,
             _ => x,
         };
 

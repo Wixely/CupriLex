@@ -36,6 +36,41 @@ public sealed record Frame(int Width, int Height, byte[] Rgba)
         return new Frame(info.Width, info.Height, normalised.GetPixelSpan().ToArray());
     }
 
+    private (byte R, byte G, byte B)? _background;
+
+    /// <summary>
+    /// The frame's own background: the colour it uses most.
+    ///
+    /// <para>Needed because "how much of this is wrong" is a different question from "how much of
+    /// the CONTENT is wrong", and on a 1080x1920 composition that paints on 6% of its area the two
+    /// answers differ by a factor of fifteen. Taking the modal colour is crude and it is right for
+    /// what it is used for: every block in this corpus is a designed composition on a filled
+    /// ground, so the most common colour IS the ground.</para>
+    ///
+    /// <para>Quantised to five bits a channel before counting, so the histogram is 32768 slots
+    /// rather than sixteen million, and the winner is then averaged over its own bucket. A
+    /// gradient background has no single exact colour but it does have a dominant bucket.</para>
+    /// </summary>
+    public (byte R, byte G, byte B) Background()
+    {
+        if (_background is { } known) return known;
+
+        var counts = new int[32768];
+        for (long i = 0; i + 3 < Rgba.LongLength; i += 4)
+            counts[((Rgba[i] >> 3) << 10) | ((Rgba[i + 1] >> 3) << 5) | (Rgba[i + 2] >> 3)]++;
+
+        var top = 0;
+        for (var slot = 1; slot < counts.Length; slot++)
+            if (counts[slot] > counts[top]) top = slot;
+
+        // The bucket's centre, not its corner: 5 bits back to 8 with the midpoint added.
+        _background = ((byte)(((top >> 10) & 31) << 3 | 4),
+            (byte)(((top >> 5) & 31) << 3 | 4),
+            (byte)((top & 31) << 3 | 4));
+
+        return _background.Value;
+    }
+
     public SKBitmap ToBitmap()
     {
         var bitmap = new SKBitmap(Info8888.WithSize(Width, Height));
@@ -53,35 +88,58 @@ public sealed record Frame(int Width, int Height, byte[] Rgba)
     }
 }
 
-/// <summary>How close two frames are.</summary>
-/// <param name="Similarity">1.0 for identical frames. One minus the mean absolute difference per
-/// colour channel, over every pixel. Blunt on purpose: it is a number that can be averaged, and
-/// the diff image beside it is what says WHERE.</param>
+/// <summary>How close two frames are, in four numbers that fail differently.</summary>
+/// <param name="Similarity">One minus the mean absolute difference per colour channel, over every
+/// pixel. Averaged across the identical pixels too, so it collapses toward zero and flatters
+/// almost everything.</param>
 /// <param name="Differing">The share of pixels visibly different - any channel off by more than
-/// <see cref="Threshold"/>. The honest companion to similarity: a frame that is nine tenths flat
-/// background scores well on similarity while being wrong everywhere that matters.</param>
-public sealed record Comparison(double Similarity, double Differing)
+/// <see cref="Threshold"/>. WHERE it is wrong.</param>
+/// <param name="ContentDiffering">The same, counted only over the pixels the REFERENCE actually
+/// paints something on. A composition on an empty background can lose its whole text and still be
+/// wrong on 2% of the frame; this is the number that says a third of the content is missing.</param>
+/// <param name="ErrorWhenWrong">The mean divergence among the differing pixels alone, as a
+/// fraction of full scale. HOW BADLY it is wrong where it is wrong, which is the axis the other
+/// three cannot see: half a frame off by 7% is a different failure from 2% off by 62%, and the
+/// share-of-pixels measures rank those two backwards.</param>
+/// <param name="Severe">The share of the whole frame off by more than half of full scale. Content
+/// that is missing rather than merely shifted.</param>
+public sealed record Comparison(
+    double Similarity,
+    double Differing,
+    double ContentDiffering,
+    double ErrorWhenWrong,
+    double Severe)
 {
     /// <summary>Eight levels out of 255. Above the noise two rasterisers make of the same edge,
     /// below anything a person would call the same colour.</summary>
     public const int Threshold = 8;
 
-    public static readonly Comparison Identical = new(1.0, 0.0);
+    /// <summary>Half of full scale. Above this a pixel has not shifted, it has been replaced -
+    /// text that is missing rather than text that is rasterised differently.</summary>
+    public const int Severity = 128;
 
-    /// <summary>Frames of different sizes are not compared. It means one renderer was asked for a
-    /// size the other was not, which is a bug in the caller rather than a bad score.</summary>
-    public static Comparison Of(Frame a, Frame b)
+    public static readonly Comparison Identical = new(1.0, 0.0, 0.0, 0.0, 0.0);
+
+    /// <summary>
+    /// Frames of different sizes are not compared. It means one renderer was asked for a size the
+    /// other was not, which is a bug in the caller rather than a bad score.
+    /// </summary>
+    /// <param name="reference">The frame that defines what SHOULD be there, and therefore which
+    /// pixels count as content. In this harness that is always the browser.</param>
+    /// <param name="candidate">The frame being judged.</param>
+    public static Comparison Of(Frame reference, Frame candidate)
     {
-        if (a.Width != b.Width || a.Height != b.Height)
+        if (reference.Width != candidate.Width || reference.Height != candidate.Height)
             throw new ArgumentException(
-                $"cannot compare {a.Width}x{a.Height} with {b.Width}x{b.Height}");
+                $"cannot compare {reference.Width}x{reference.Height} with "
+                + $"{candidate.Width}x{candidate.Height}");
 
-        long error = 0;
-        long differing = 0;
-        var pixels = (long)a.Width * a.Height;
+        var background = reference.Background();
+        long error = 0, differing = 0, severe = 0, ink = 0, inkDiffering = 0, worstTotal = 0;
+        var pixels = (long)reference.Width * reference.Height;
 
-        var left = a.Rgba;
-        var right = b.Rgba;
+        var left = reference.Rgba;
+        var right = candidate.Rgba;
 
         for (long i = 0; i + 3 < left.LongLength; i += 4)
         {
@@ -92,12 +150,39 @@ public sealed record Comparison(double Similarity, double Differing)
             int db = Math.Abs(left[i + 2] - right[i + 2]);
 
             error += dr + dg + db;
-            if (dr > Threshold || dg > Threshold || db > Threshold) differing++;
+
+            var worst = Math.Max(dr, Math.Max(dg, db));
+            var wrong = worst > Threshold;
+
+            if (wrong)
+            {
+                differing++;
+                worstTotal += worst;
+                if (worst > Severity) severe++;
+            }
+
+            // Content: where the reference paints something other than its own background.
+            if (Math.Max(Math.Abs(left[i] - background.R),
+                    Math.Max(Math.Abs(left[i + 1] - background.G),
+                        Math.Abs(left[i + 2] - background.B))) > Threshold)
+            {
+                ink++;
+                if (wrong) inkDiffering++;
+            }
         }
+
+        // A reference that paints nothing - a solid frame, which several transition blocks show at
+        // t=0 - has no content to weight by. Falling back to the frame-wide share is the honest
+        // answer; returning zero would have scored every such frame as 100% of content correct
+        // whatever the engine drew, which is how a measure quietly becomes a lie.
+        var content = ink == 0 ? differing / (double)pixels : inkDiffering / (double)ink;
 
         return new Comparison(
             1.0 - error / (double)(pixels * 3 * 255),
-            differing / (double)pixels);
+            differing / (double)pixels,
+            content,
+            differing == 0 ? 0 : worstTotal / (double)differing / 255,
+            severe / (double)pixels);
     }
 }
 

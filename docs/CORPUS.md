@@ -147,6 +147,10 @@ it.
 **The fraction of the corpus that renders correctly.** Not the number of rewrite rules, not the
 number of blocks that parse without an error — how many produce frames that match the browser.
 
-That instrument now exists — `harness/`, see [HARNESS.md](HARNESS.md) — and its first reading is
-**55.2% matching over the 125 blocks whose reference actually moves**, with **150 of 150 scored
-blocks rendering one still frame**. Nothing animates yet, which is the honest place to start from.
+That instrument exists — `harness/`, see [HARNESS.md](HARNESS.md). It scores **185 of 187** blocks,
+**38 of them animating**, at **38.1% of content**: the share of the pixels the browser actually
+paints on that the engine gets right.
+
+Earlier readings quoted a frame-wide measure — 55.2% before the compiler, 62.8% after — which
+counted the empty background too and flattered by about 29 points. It was replaced as the headline
+after it was found ranking the corpus backwards.

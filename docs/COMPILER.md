@@ -124,13 +124,17 @@ still render wrongly. What it was worth, against the browser:
 | | before the compiler | with it, on 0.26.1 | on 0.27.0 |
 |---|---|---|---|
 | blocks scored | 150 of 187 | 183 of 187 | **185 of 187** |
-| mean matching, over blocks whose reference moves | 55.2% | 62.8% | **62.7%** |
+| mean of frame, over blocks whose reference moves | 55.2% | 62.8% | 62.7% |
+| **mean of content**, all scored blocks | — | — | **38.1%** |
 | blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 |
 
 38 blocks animate where none did. The engine upgrade added two more scorable blocks and left the
-mean where it was, which is itself worth knowing: on the 183 blocks scored in both runs the mean
-moved 67.1% to 67.3%, 15 blocks improved by about three points each and two lost under two. The
-remaining error is not in the features that were fixed. See [HARNESS.md](HARNESS.md).
+frame-wide mean where it was, which is itself worth knowing: on the 183 blocks scored in both runs
+it moved 67.1% to 67.3%, 15 blocks improved by about three points each and two lost under two.
+
+The content row has no earlier figures because the measure did not exist until the frame-wide one
+was caught ranking the corpus backwards. It is 29 points below the frame-wide number and it is the
+one to steer by; see [HARNESS.md](HARNESS.md) for why there are now four.
 
 ---
 

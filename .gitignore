@@ -12,3 +12,8 @@ conformance/out/
 # Comparison runs: gigabytes of frames, and a score that is only meaningful beside the engine
 # version and machine that produced it. Quote baseline.json in a commit message, do not commit it.
 harness/out/
+
+# A run you can look at: index.html plus every block's worst frame, written by --gallery. Same
+# reasoning as harness/out - gigabytes of frames, and a score only meaningful beside the engine
+# version that produced it.
+review/

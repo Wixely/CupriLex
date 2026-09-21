@@ -1,0 +1,231 @@
+// Debug targets for the three instruments. Everything writes only to review/, harness/out or
+// conformance/support, all of which are ignored, so a debugging session changes no tracked file.
+//
+// Start with "review: whole corpus" - it scores all 187 blocks, writes review/index.html, and
+// opens it when the run finishes. Ten minutes. "review: first 12 blocks" is the same in under a
+// minute.
+//
+// The harness needs a headless browser (Edge or Chrome, or CUPRILEX_BROWSER pointing at one) and
+// the network, because every corpus block pulls GSAP from a CDN. The corpus is not vendored: run
+// `python tools/fetch-corpus.py` once first. The compiler and conformance targets need neither.
+{
+  "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "block",
+      "type": "promptString",
+      "description": "Block name, as the file is called without .html (try bar-chart-race, ai-chat-reveal, transitions-distortion)",
+      "default": "notes-reveal"
+    }
+  ],
+  "configurations": [
+    {
+      "name": "review: whole corpus -> review/index.html",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "postDebugTask": "open review gallery",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "--all",
+        "--out",
+        "review",
+        "--gallery"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "review: first 12 blocks (quick look)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "postDebugTask": "open review gallery",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "--all",
+        "--limit",
+        "12",
+        "--out",
+        "review",
+        "--gallery"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "review: one block, every sample",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "postDebugTask": "open review gallery",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "${input:block}",
+        "--frames",
+        "--out",
+        "review",
+        "--gallery"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "harness: one block, keep every frame",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "${input:block}",
+        "--frames"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "harness: one block, more samples",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "${input:block}",
+        "--frames",
+        "--samples",
+        "9"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "harness: the whole corpus",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "--all",
+        "--out",
+        "harness/out"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "harness: first 10 blocks only",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "--all",
+        "--limit",
+        "10"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "harness: re-summarise the last run",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build harness",
+      "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
+      "args": [
+        "--report",
+        "harness/out/baseline.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "compiler: translate one block",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build compiler",
+      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "args": [
+        "translate",
+        "${input:block}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "compiler: reach across the corpus",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build compiler",
+      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "args": [
+        "reach"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "compiler: what the corpus writes (shapes)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build compiler",
+      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "args": [
+        "shapes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "conformance: measure this engine",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build conformance",
+      "program": "${workspaceFolder}/conformance/bin/Debug/net10.0/CupriLex.Conformance.dll",
+      "args": [
+        "--out",
+        "conformance/support"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "conformance: compare two versions",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build conformance",
+      "program": "${workspaceFolder}/conformance/bin/Debug/net10.0/CupriLex.Conformance.dll",
+      "args": [
+        "--compare",
+        "conformance/support/0.26.2.json",
+        "conformance/support/0.27.0.json"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "tests: all",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build tests",
+      "program": "${workspaceFolder}/tests/CupriLex.Harness.Tests/bin/Debug/net10.0/CupriLex.Harness.Tests.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "tests: one class",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build tests",
+      "program": "${workspaceFolder}/tests/CupriLex.Harness.Tests/bin/Debug/net10.0/CupriLex.Harness.Tests.exe",
+      "args": [
+        "-class",
+        "CupriLex.Harness.Tests.CompilerTests"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

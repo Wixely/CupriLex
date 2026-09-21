@@ -6,7 +6,14 @@ using System.Text.Json.Serialization;
 namespace CupriLex.Harness;
 
 /// <summary>How one sample time came out.</summary>
-public sealed record Sample(double Time, double Similarity, double Differing);
+/// <param name="ContentDiffering">The share of the pixels the browser paints on that are wrong.
+/// The headline, because the frame-wide share is dominated by empty background.</param>
+/// <param name="ErrorWhenWrong">How far the wrong pixels are wrong, as a fraction of full scale.
+/// The axis that separates "rasterised differently" from "missing".</param>
+/// <param name="Severe">The share of the frame off by more than half of full scale.</param>
+public sealed record Sample(
+    double Time, double Similarity, double Differing,
+    double ContentDiffering, double ErrorWhenWrong, double Severe);
 
 /// <summary>One block's score, and enough beside it to know whether to believe the score.</summary>
 /// <param name="Matching">The headline: the share of pixels that are not visibly different, mean
@@ -33,8 +40,11 @@ public sealed record Score(
     double Duration,
     string DurationSource,
     double TimelineSeconds,
+    double Content,
     double Matching,
     double Similarity,
+    double ErrorWhenWrong,
+    double Severe,
     double Worst,
     double ReferenceMoves,
     double EngineMoves,
@@ -42,7 +52,11 @@ public sealed record Score(
     IReadOnlyList<Sample> Samples,
     IReadOnlyList<string> Refusals,
     IReadOnlyList<string> Diagnostics,
-    string? Failure);
+    string? Failure)
+{
+    /// <summary>The folder this block's images went into: the name as one path segment.</summary>
+    public string Slug() => Block.Replace('/', '_');
+}
 
 /// <summary>
 /// The instrument this project is steered by: how close the engine's frames are to a browser's,
@@ -71,6 +85,7 @@ public static class Program
             var output = Option(args, "--out") ?? Path.Combine("harness", "out");
             var limit = int.Parse(Option(args, "--limit") ?? "0", CultureInfo.InvariantCulture);
             var keepFrames = args.Contains("--frames");
+            var gallery = args.Contains("--gallery");
 
             // Re-read a finished run instead of producing one. A corpus run is a quarter of an
             // hour of rendering, and a better way of summarising it should not cost that again.
@@ -95,7 +110,7 @@ public static class Program
 
             if (limit > 0) blocks = [.. blocks.Take(limit)];
 
-            return await RunAsync(blocks, samples, output, keepFrames);
+            return await RunAsync(blocks, samples, output, keepFrames, gallery);
         }
         catch (Exception ex)
         {
@@ -105,7 +120,7 @@ public static class Program
     }
 
     private static async Task<int> RunAsync(
-        IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames)
+        IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames, bool gallery)
     {
         var fonts = Engine.FindFonts();
         Directory.CreateDirectory(output);
@@ -147,6 +162,11 @@ public static class Program
         if (blocks.Count > 1) Summarise(scores);
         Console.WriteLine();
         Console.WriteLine($"wrote {path}");
+
+        if (gallery)
+            Console.WriteLine("wrote " + Gallery.Write(
+                output, scores, Engine.Version, browser.Version, report.Measured));
+
         return 0;
     }
 
@@ -176,7 +196,7 @@ public static class Program
         var clock = Stopwatch.StartNew();
 
         Score Failed(string why) => new(block.Name, block.Width, block.Height, block.Duration,
-            block.DurationSource, 0, 0, 0, 0, 0, 0, Math.Round(clock.Elapsed.TotalSeconds, 2),
+            block.DurationSource, 0, 0, 0, 0, 0, 0, 0, 0, 0, Math.Round(clock.Elapsed.TotalSeconds, 2),
             [], [], [], why);
 
         Reference reference;
@@ -215,10 +235,12 @@ public static class Program
         {
             var c = Comparison.Of(reference.Frames[i], rendered.Frames[i]);
             comparisons.Add(new Sample(Math.Round(times[i], 3),
-                Math.Round(c.Similarity, 5), Math.Round(c.Differing, 5)));
+                Math.Round(c.Similarity, 5), Math.Round(c.Differing, 5),
+                Math.Round(c.ContentDiffering, 5), Math.Round(c.ErrorWhenWrong, 5),
+                Math.Round(c.Severe, 5)));
         }
 
-        var worstIndex = comparisons.IndexOf(comparisons.MaxBy(s => s.Differing)!);
+        var worstIndex = comparisons.IndexOf(comparisons.MaxBy(s => s.ContentDiffering)!);
         var folder = Path.Combine(output, block.Slug);
 
         // The worst sample always, because it is the one that says what went wrong. Every sample
@@ -244,9 +266,12 @@ public static class Program
         return new Score(
             block.Name, block.Width, block.Height, block.Duration, block.DurationSource,
             Math.Round(reference.TimelineSeconds, 3),
+            Math.Round(comparisons.Average(s => 1 - s.ContentDiffering), 5),
             Math.Round(comparisons.Average(s => 1 - s.Differing), 5),
             Math.Round(comparisons.Average(s => s.Similarity), 5),
-            Math.Round(1 - comparisons.Max(s => s.Differing), 5),
+            Math.Round(comparisons.Average(s => s.ErrorWhenWrong), 5),
+            Math.Round(comparisons.Average(s => s.Severe), 5),
+            Math.Round(1 - comparisons.Max(s => s.ContentDiffering), 5),
             Math.Round(Movement(reference.Frames), 5),
             Math.Round(Movement(rendered.Frames), 5),
             Math.Round(clock.Elapsed.TotalSeconds, 2),
@@ -308,8 +333,9 @@ public static class Program
         }
 
         var frozen = score.EngineMoves == 0 ? "  engine still" : "";
-        Console.WriteLine($"{score.Block,-38}  {Percent(score.Matching),7} matching  "
-                          + $"worst {Percent(score.Worst),7}  ref moves {Percent(score.ReferenceMoves),6}{frozen}");
+        Console.WriteLine($"{score.Block,-34}  {Percent(score.Content),7} of content  "
+                          + $"{Percent(score.Matching),7} of frame  off by {Percent(score.ErrorWhenWrong),6}"
+                          + $"  severe {Percent(score.Severe),6}{frozen}");
 
         if (!verbose) return;
 
@@ -322,9 +348,11 @@ public static class Program
                               + "samples land where the reference is already a still frame.");
 
         Console.WriteLine();
-        Console.WriteLine($"  {"time",8}  {"matching",10}  {"mean error",12}");
+        Console.WriteLine($"  {"time",8}  {"content",9}  {"frame",9}  {"off by",9}  {"severe",8}");
         foreach (var s in score.Samples)
-            Console.WriteLine($"  {s.Time,8:0.###}  {Percent(1 - s.Differing),10}  {Percent(1 - s.Similarity),12}");
+            Console.WriteLine($"  {s.Time,8:0.###}  {Percent(1 - s.ContentDiffering),9}  "
+                              + $"{Percent(1 - s.Differing),9}  {Percent(s.ErrorWhenWrong),9}  "
+                              + $"{Percent(s.Severe),8}");
 
         if (score.Refusals.Count > 0)
         {
@@ -353,14 +381,22 @@ public static class Program
 
         if (scored.Length == 0) return;
 
-        Console.WriteLine($"mean matching    {Percent(scored.Average(s => s.Matching))}");
-        Console.WriteLine($"median           {Percent(Median([.. scored.Select(s => s.Matching)]))}");
-        Console.WriteLine($"worst block      {Percent(scored.Min(s => s.Matching))}  "
-                          + $"({scored.MinBy(s => s.Matching)!.Block})");
-        Console.WriteLine($"best block       {Percent(scored.Max(s => s.Matching))}  "
-                          + $"({scored.MaxBy(s => s.Matching)!.Block})");
-        Console.WriteLine($"mean error       {Percent(1 - scored.Average(s => s.Similarity))} "
-                          + "of full scale, per channel");
+        // The content share leads, because it is the one that does not reward losing a
+        // composition's text on an empty background. The frame share is beside it so the two can
+        // be compared, and the gap between them is a measure of how empty the corpus is.
+        Console.WriteLine($"mean of content  {Percent(scored.Average(s => s.Content))}   <- the number to beat");
+        Console.WriteLine($"median           {Percent(Median([.. scored.Select(s => s.Content)]))}");
+        Console.WriteLine($"worst block      {Percent(scored.Min(s => s.Content))}  "
+                          + $"({scored.MinBy(s => s.Content)!.Block})");
+        Console.WriteLine($"best block       {Percent(scored.Max(s => s.Content))}  "
+                          + $"({scored.MaxBy(s => s.Content)!.Block})");
+        Console.WriteLine();
+        Console.WriteLine($"mean of frame    {Percent(scored.Average(s => s.Matching))} "
+                          + "- the same thing counted over empty background too");
+        Console.WriteLine($"off by           {Percent(scored.Average(s => s.ErrorWhenWrong))} "
+                          + "where it is wrong at all");
+        Console.WriteLine($"severe           {Percent(scored.Average(s => s.Severe))} "
+                          + "of the frame replaced rather than shifted");
         Console.WriteLine($"engine still     {scored.Count(s => s.EngineMoves == 0)} of {scored.Length} "
                           + "blocks rendered the same frame at every time");
 
@@ -372,9 +408,8 @@ public static class Program
                           + "blocks change under 1% of their pixels over time; their score says little");
 
         if (animated.Length > 0)
-            Console.WriteLine($"mean matching    {Percent(animated.Average(s => s.Matching))} "
-                              + $"over the {animated.Length} blocks whose reference actually moves "
-                              + "- the number to beat");
+            Console.WriteLine($"mean of content  {Percent(animated.Average(s => s.Content))} "
+                              + $"over the {animated.Length} blocks whose reference actually moves");
 
         if (failed.Length == 0) return;
 
@@ -424,6 +459,7 @@ public static class Program
                 --frames       keep every sample's images, not only the worst
                 --limit N      stop after N blocks, for a quick look
 
+                --gallery      also write index.html: every block, worst first, with its images
                 --report FILE  re-summarise a finished run's baseline.json, rendering nothing
 
             Needs the corpus: python tools/fetch-corpus.py
@@ -432,7 +468,9 @@ public static class Program
 
     private static string Caption(Block block, Sample sample) =>
         $"{block.Name}   t={sample.Time.ToString("0.###", CultureInfo.InvariantCulture)}s   "
-        + $"{Percent(1 - sample.Differing)} matching, {Percent(1 - sample.Similarity)} mean error";
+        + $"{Percent(1 - sample.ContentDiffering)} of content   "
+        + $"{Percent(1 - sample.Differing)} of frame   "
+        + $"off by {Percent(sample.ErrorWhenWrong)}";
 
     private static string Percent(double fraction) =>
         (fraction * 100).ToString("0.0", CultureInfo.InvariantCulture) + "%";

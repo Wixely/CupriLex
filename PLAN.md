@@ -57,7 +57,7 @@ written: browser, engine, difference.
 |---|---|
 | scored | 150 of 187 |
 | mean matching | 61.6% |
-| **over the 125 blocks whose reference actually moves** | **55.2%** — the number every later milestone has to move |
+| **over the 125 blocks whose reference actually moves** | **55.2%** — frame-wide, the measure in use at the time |
 | blocks where the engine rendered the same frame at every time | **150 of 150** |
 
 The baseline is terrible, as expected, and *how* it is terrible is the useful part: not one block
@@ -125,7 +125,8 @@ linear — eight samples, chosen arbitrarily and still owed a measurement.
 | | before | after |
 |---|---|---|
 | blocks scored | 150 of 187 | **183 of 187** |
-| mean matching, over blocks whose reference moves | 55.2% | **62.8%** |
+| mean of frame, over blocks whose reference moves | 55.2% | 62.8% |
+| **mean of content** (the measure that replaced it) | — | **38.1%** |
 | blocks rendering one still frame | **150 of 150** | 145 of 183 |
 
 38 blocks now animate and 33 more can be loaded at all. The mean is not a like-for-like

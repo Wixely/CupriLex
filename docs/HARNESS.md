@@ -58,25 +58,46 @@ it would make the two sides diverge on purpose.
 
 ---
 
-## The number, and what it is worth
+## The four numbers, and why there are four
 
 | | |
 |---|---|
-| **matching** | the share of pixels not visibly different — any channel off by more than 8 of 255. The headline. |
-| **mean error** | mean absolute difference per channel. Reported second, because it is far too kind. |
-| **reference moves** | how much the browser's own frames differ from its first one. The calibration. |
-| **engine moves** | the same for the engine's frames. **Zero means nothing animated at all.** |
+| **of content** | the share of the pixels the BROWSER paints on that are not visibly wrong. The headline. |
+| of frame | the same thing counted over the empty background too. |
+| off by | how far the wrong pixels are wrong, as a fraction of full scale, among the wrong ones only. |
+| severe | the share of the frame off by more than half of full scale: replaced rather than shifted. |
 
-Both numbers are generous to a composition that leaves most of the frame flat, and it is worth
-being blunt about how generous. `carousel-circle-1` renders in the engine as an empty grey
-rectangle — not one of its cards appears — and scores **99.4% mean similarity**, because white
-cards on light grey are a small per-pixel difference over a tenth of the frame. On the matching
-measure the same frame scores 90.9%, which is better but still not a number to quote alone.
+"Visibly wrong" means any colour channel off by more than 8 of 255. Below that two rasterisers
+disagree about the same edge; above it they disagree about the colour. Alpha is ignored, because
+both sides are asked for an opaque frame.
 
-That is why every report carries the differing share, the movement columns, and a picture. It is
-also asserted in `ComparisonTests`, so nobody has to rediscover it:
+### Why not just one
 
-> `A_frame_missing_a_tenth_of_itself_still_scores_over_ninety_percent_similar`
+The first version of this harness reported one number, the share of the frame within tolerance,
+and it **ranked the corpus backwards**. Two blocks, measured at the same instant:
+
+| | of frame | of content | off by | severe |
+|---|---|---|---|---|
+| `ai-chat-reveal` | 97.8% | 66.3% | 62.0% | 1.5% |
+| `code-typing` | 55.8% | 70.6% | 6.9% | 0.1% |
+
+`ai-chat-reveal` is missing its entire answer paragraph. `code-typing` draws everything and
+rasterises its glyphs slightly differently. By the frame-wide share the first looks nearly perfect
+and the second looks broken; they are the other way round.
+
+The two measures fail in opposite directions and neither is redundant:
+
+- **of content** fixes the area bias. A 1080×1920 composition that paints on 6% of its area can
+  lose a third of its text and still be wrong on 2% of the frame.
+- **off by** fixes the magnitude blindness. Half a frame off by 7% and a fiftieth off by 62% are
+  different failures, and no share-of-pixels measure can tell them apart.
+
+Content is defined against the reference's own background, taken as its most common colour,
+quantised to five bits a channel. Every block in this corpus is a designed composition on a filled
+ground, so the dominant colour is the ground. A reference that paints nothing at all - a solid
+frame, which several transition blocks open on - has no content to weight by, and falls back to the
+frame-wide share rather than declaring itself perfect. That fallback exists because the first
+version did declare itself perfect, and a test caught it.
 
 **A block whose reference could not be produced is never scored zero.** It is reported as
 unmeasured, by name, with the reason. Unmeasured and wrong are different things, and a zero would
@@ -95,7 +116,7 @@ The first corpus-wide run. **CupriFace 0.26.1, Edg/153.0.4234.32, Windows, 5 sam
 | unmeasured | **37** |
 | mean matching | **61.6%** |
 | median | 79.2% |
-| **mean matching, over the 125 blocks whose reference actually moves** | **55.2%** — the number to beat |
+| **mean matching, over the 125 blocks whose reference actually moves** | **55.2%** — frame-wide, the measure in use at the time |
 | blocks where the engine rendered the same frame at every time | **150 of 150** |
 
 ```
@@ -137,6 +158,7 @@ Same harness, same engine, same browser, with [the GSAP compiler](COMPILER.md) i
 | unmeasured | 37 | **4** |
 | mean matching | 61.6% | 67.1% |
 | **over blocks whose reference moves** | **55.2%** | **62.8%** |
+| (both frame-wide; the content measure came later and reads 38.1%) | | |
 | engine rendered one still frame | **150 of 150** | 145 of 183 |
 
 Three of the four blocks still unmeasured are the same engine crash in a form the rewrite does not

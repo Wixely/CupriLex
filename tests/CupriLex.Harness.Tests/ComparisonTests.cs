@@ -85,6 +85,101 @@ public class ComparisonTests
         Assert.True(result.Similarity < 1.0, "a difference the eye ignores is still error");
     }
 
+    // ---- the two measures added after the first metric ranked the corpus backwards -------------
+
+    /// <summary>
+    /// Content is counted over the pixels the REFERENCE paints on, not over the whole frame.
+    ///
+    /// <para>The same missing rectangle is 10% of a frame and 100% of its content. On a 1080x1920
+    /// composition that paints on 6% of its area, the two answers differ by a factor of fifteen,
+    /// and the frame-wide one is what made a block missing its entire answer text score 97.8%.</para>
+    /// </summary>
+    [Fact]
+    public void Content_is_measured_over_what_the_reference_actually_paints()
+    {
+        var reference = WithBlackRectangle(Flat(100, 100, 255, 255, 255), 0, 0, 100, 10);
+        var blank = Flat(100, 100, 255, 255, 255);
+
+        var result = Comparison.Of(reference, blank);
+
+        Assert.Equal(0.10, result.Differing, 6);          // a tenth of the frame
+        Assert.Equal(1.00, result.ContentDiffering, 6);   // all of the content
+    }
+
+    /// <summary>
+    /// A reference that paints nothing falls back to the frame-wide share.
+    ///
+    /// <para>A uniform frame is ALL background by definition, so there is no content to weight by.
+    /// The first version returned zero for that - reporting every such frame as perfect content
+    /// whatever the candidate drew - and several transition blocks open on exactly a solid fill.
+    /// This test is why the fallback exists.</para>
+    /// </summary>
+    [Fact]
+    public void A_reference_that_paints_nothing_falls_back_to_the_frame_wide_share()
+    {
+        var result = Comparison.Of(Flat(16, 16, 255, 255, 255), Flat(16, 16, 0, 0, 0));
+
+        Assert.Equal(1.0, result.Differing);
+        Assert.Equal(1.0, result.ContentDiffering);
+    }
+
+    /// <summary>
+    /// How far wrong, among the pixels that are wrong at all.
+    ///
+    /// <para>The axis the share-of-pixels measures cannot see. Half a frame off by 7% is a
+    /// different failure from a fiftieth off by 62% - the first is text rasterised differently,
+    /// the second is text that is not there - and by share alone the first looks far worse.</para>
+    /// </summary>
+    [Fact]
+    public void Error_when_wrong_ignores_the_pixels_that_are_right()
+    {
+        var reference = Flat(100, 100, 255, 255, 255);
+
+        // One row in ten, replaced outright. The other nine are untouched.
+        var result = Comparison.Of(reference, WithBlackRectangle(reference, 0, 0, 100, 10));
+
+        Assert.Equal(0.10, result.Differing, 6);
+        Assert.Equal(1.0, result.ErrorWhenWrong, 3);   // black against white: the whole scale
+        Assert.Equal(0.10, result.Severe, 6);
+    }
+
+    /// <summary>A small, uniform shift is wrong everywhere and barely wrong anywhere - the shape
+    /// of a different rasteriser rather than missing content, and nothing severe.</summary>
+    [Fact]
+    public void A_slight_shift_everywhere_reads_as_slight()
+    {
+        var result = Comparison.Of(Flat(32, 32, 100, 100, 100), Flat(32, 32, 130, 100, 100));
+
+        Assert.Equal(1.0, result.Differing);
+        Assert.Equal(30 / 255.0, result.ErrorWhenWrong, 3);
+        Assert.Equal(0.0, result.Severe);
+    }
+
+    [Fact]
+    public void Identical_frames_have_no_error_to_report()
+    {
+        var frame = Flat(64, 64, 0xF5, 0xF3, 0xEF);
+        var result = Comparison.Of(frame, frame);
+
+        Assert.Equal(0.0, result.ErrorWhenWrong);
+        Assert.Equal(0.0, result.Severe);
+        Assert.Equal(0.0, result.ContentDiffering);
+    }
+
+    /// <summary>The background is the frame's most common colour, which on a designed composition
+    /// is its ground. Everything else counts as content.</summary>
+    [Fact]
+    public void The_background_is_the_colour_the_frame_uses_most()
+    {
+        var frame = WithBlackRectangle(Flat(100, 100, 240, 240, 240), 0, 0, 20, 20);
+
+        var (r, g, b) = frame.Background();
+
+        Assert.InRange(r, 236, 244);
+        Assert.InRange(g, 236, 244);
+        Assert.InRange(b, 236, 244);
+    }
+
     [Fact]
     public void Frames_of_different_sizes_are_refused_rather_than_scored()
     {

@@ -55,33 +55,47 @@ See [PLAN.md](PLAN.md).
 ## Where it stands
 
 A headless browser renders each block seeked to an exact instant; CupriFace renders the same
-instants; the frames are compared. One number per block, and the picture that explains it.
+instant; the frames are compared. One number per block, and the picture that explains it.
 
 ```
-dotnet run --project harness -- bar-chart-race
-dotnet run --project harness -- --all
+dotnet run --project harness -- notes-reveal          # one block
+dotnet run --project harness -- --all --out review --gallery
 ```
 
-![browser, engine, difference](docs/images/harness-bar-chart-race.png)
+The second writes `review/index.html`: every block, worst first, with its images. That is the
+fastest way to see the current state, and `review/` is ignored.
 
-On CupriFace 0.26.1, before and after the GSAP compiler — see
-[docs/HARNESS.md](docs/HARNESS.md) and [docs/COMPILER.md](docs/COMPILER.md):
+**A block the compiler carries.** The composition arrives, its SVG draws, its layout holds. What is
+missing is the handwritten face, which falls back to a plain one, and the card's rotation.
 
-| | baseline | with the compiler | on CupriFace 0.27.0 |
-|---|---|---|---|
-| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** |
-| mean matching, over blocks whose reference moves | 55.2% | 62.8% | **62.7%** |
-| blocks that rendered the same frame at every time | **150 of 150** | 145 of 183 | 147 of 185 |
-| unmeasurable because the engine threw on the document | 35 | 2 | **0** |
+![notes-reveal: browser, engine, difference](docs/images/harness-notes-reveal.png)
 
-38 blocks now animate. The mean is not a like-for-like comparison, because the blocks that could not
-previously be loaded at all are now in the population and they score below average — which is the
-honest reason the headline moved less than the work did.
+**A block it refuses.** Every bar, label and gridline here is built by `document.createElement`, and
+the timeline that animates them is assembled in a loop over parsed data. There is nothing in the
+markup for a JavaScript-free renderer to draw, and the compiler says so rather than guessing.
 
-**0.27.0 closed three gaps this repository had reported and deleted two of its own rewrite rules.**
-`letter-spacing`, `inset` and inline `<svg>` all work now. The corpus score barely moved, which
-says where the remaining error actually is: not in those features, but in motion the compiler
-cannot resolve.
+![bar-chart-race: browser, engine, difference](docs/images/harness-bar-chart-race.png)
+
+### The numbers
+
+On CupriFace 0.27.0, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
+
+| | |
+|---|---|
+| blocks scored | **185 of 187** |
+| **mean of content** | **38.1%** — the number to beat |
+| median | 40.0% |
+| mean of frame | 67.0% |
+| where it is wrong, off by | 33.0% of full scale |
+| blocks that render one still frame | 147 of 185 |
+
+**Read the content number, not the frame number.** They differ by 29 points because these
+compositions paint on a small share of a large frame, so counting the empty background rewards a
+translation that loses the content. One block scores 98.3% of frame and 0.0% of content. The four
+measures and why there are four are set out in [docs/HARNESS.md](docs/HARNESS.md).
+
+The earlier figures in this repository's history — 55.2%, 62.8% — were the frame-wide measure. They
+were not wrong, but they flattered, and the content measure replaces them as the headline.
 
 ---
 

@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace CupriLex.Harness.Tests;
 
@@ -95,5 +95,29 @@ public class CorpusTests
 
         var thrown = Assert.Throws<FileNotFoundException>(() => Corpus.Find("bar-chart"));
         Assert.Contains("bar-chart-race", thrown.Message);
+    }
+
+    [Fact]
+    public void Every_block_in_the_fast_set_still_exists()
+    {
+        // The fast set is a list of names in source, and the corpus is fetched rather than
+        // vendored. A renamed block would turn a canary into a silent absence - the run would
+        // still pass, over eight blocks instead of nine, watching one thing less. Better to
+        // fail here, where the message can say which one and why it mattered.
+        RequireCorpus();
+
+        var names = Corpus.Fast().Select(b => b.Name).ToArray();
+
+        Assert.Equal(Corpus.Quick.Count, names.Length);
+        Assert.Equal(Corpus.Quick.Select(q => q.Block), names);
+    }
+
+    [Fact]
+    public void Every_block_in_the_fast_set_says_what_it_is_watching()
+    {
+        // A subset whose reasons are missing decays into nine arbitrary names within a release or
+        // two, and then into a subset nobody trusts enough to act on.
+        Assert.All(Corpus.Quick, q => Assert.True(q.Why.Length > 40,
+            $"'{q.Block}' has no real reason recorded: \"{q.Why}\""));
     }
 }

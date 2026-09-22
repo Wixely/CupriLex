@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 using CupriLex.Compiler;
 
@@ -57,6 +57,81 @@ public static class Corpus
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return [.. paths.Select(p => Describe(p, ambiguous))];
+    }
+
+    /// <summary>
+    /// Nine blocks, for the run you do between the runs that count.
+    ///
+    /// <para>A corpus pass is a quarter of an hour and most of it is spent confirming that 93
+    /// blocks still paint nothing. This set is chosen so that each block is the FIRST place a
+    /// different kind of change would show, which is the only property that makes a subset worth
+    /// having: a sample of nine tells you about nine blocks, but nine chosen canaries tell you
+    /// which mechanism you broke.</para>
+    ///
+    /// <para><b>It is not the score.</b> These blocks were picked partly for being unusually
+    /// alive, so the mean over them is far above the corpus mean and means nothing on its own.
+    /// Quote <c>--all</c>, always, in a commit message or a document. This is for the loop.</para>
+    ///
+    /// <para>Chosen from the 0.28.1 run in review/baseline.json, and worth revisiting when the
+    /// corpus changes shape - if a block here ever joins the 93 that paint nothing, it has stopped
+    /// being a canary and needs replacing.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<(string Block, string Why)> Quick =
+    [
+        ("slack-notification-ad",
+            "the most animated block in the engine: 75% of its pixels move, against a reference "
+            + "that moves 100%. Nothing else comes close, so motion breaks here first"),
+
+        ("app-showcase",
+            "100% reference movement, 35% engine movement, and the one block whose clock sweep "
+            + "shows a genuine unexplained valley at +0.20s. Timing work is judged here"),
+
+        ("notes-reveal",
+            "the best-scoring block that both animates and paints text (86%). The typography "
+            + "canary: it is one of three blocks the WOFF 2 decoder moved at all"),
+
+        ("heygen-avatar-promo-card",
+            "the block the WOFF 2 decoder helped most (+0.9), and it animates. The other half of "
+            + "the font signal, on a portrait composition rather than a landscape one"),
+
+        ("mk-clone-wall-transition",
+            "paints 91% of its own frame - more than any other block - and still scores 23%. The "
+            + "only shape of failure where colour and geometry fidelity can show up at all: this "
+            + "one draws the WRONG thing rather than nothing"),
+
+        ("code-snippet-visual-studio-light",
+            "80% content over dense text, no engine motion. The high-water mark: anything that "
+            + "breaks text layout or rasterisation drops this before it shows anywhere else"),
+
+        ("world-map",
+            "the <svg> canary at 77%. Inline SVG needs an optional package and a UseSvg() call, "
+            + "and a translation that quietly stopped making it would look fine everywhere else"),
+
+        ("transitions-mechanical",
+            "28 refusals, a quarter of the frame moving in the engine. The compiler-reach canary: "
+            + "when the compiler learns to carry something new, the refusal count drops here"),
+
+        ("chatgpt-exchange",
+            "0.0% content, 0.0% ink, 43 refusals: the representative of the 93 blocks that paint "
+            + "nothing. It keeps the fast set honest, and if a change ever makes a blank block "
+            + "paint, this is where it shows"),
+    ];
+
+    /// <summary>The <see cref="Quick"/> set, resolved. Throws by name if one has been renamed or
+    /// removed, rather than quietly running eight.</summary>
+    public static IReadOnlyList<Block> Fast()
+    {
+        var all = All().ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
+        var missing = Quick.Where(q => !all.ContainsKey(q.Block)).Select(q => q.Block).ToArray();
+
+        if (missing.Length > 0)
+            throw new FileNotFoundException(
+                "The fast set names blocks this corpus does not have: "
+                + string.Join(", ", missing)
+                + ". Fix Corpus.Quick rather than the corpus - it is a list of canaries, and a "
+                + "missing one means the thing it was watching is no longer watched.");
+
+        return [.. Quick.Select(q => all[q.Block])];
     }
 
     /// <summary>By name, with the near misses listed - a typo should not read like an empty corpus.</summary>

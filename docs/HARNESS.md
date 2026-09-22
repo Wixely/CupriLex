@@ -274,13 +274,39 @@ The compiler will have to decide which one a translated composition keeps.
 
 ```
 dotnet run --project harness -- <block>     score one block
-dotnet run --project harness -- --all       score the corpus
+dotnet run --project harness -- --fast      score the nine canaries, about 30 seconds
+dotnet run --project harness -- --all       score the corpus, about 40 minutes
 
   --samples N    times across the declared duration (default 5)
   --out DIR      where frames and baseline.json go (default harness/out)
   --frames       keep every sample's images, not only the worst
   --limit N      stop after N blocks, for a quick look
 ```
+
+### The fast set
+
+Nine blocks, listed with their reasons in `Corpus.Quick` and printed at the top of every `--fast`
+run. They are not a sample. Each one is the **first place a different kind of change shows up**, so
+nine canaries say which mechanism moved where nine random blocks would only say that something did:
+
+| block | watching |
+|---|---|
+| `slack-notification-ad` | motion — 75% of its pixels move in the engine, more than any other block |
+| `app-showcase` | timing — 100% reference movement, and an unexplained clock valley at +0.20s |
+| `notes-reveal` | typography — the best-scoring block that both animates and paints text |
+| `heygen-avatar-promo-card` | typography, portrait — the block the WOFF 2 decoder helped most |
+| `mk-clone-wall-transition` | fidelity — paints 91% of its frame and scores 23%: wrong, not missing |
+| `code-snippet-visual-studio-light` | text layout — 80% over dense text, the high-water mark |
+| `world-map` | inline `<svg>`, which needs an optional package and a call to enable it |
+| `transitions-mechanical` | compiler reach — 28 refusals, and a quarter of the frame moving |
+| `chatgpt-exchange` | the 93 that paint nothing, so the fast set cannot flatter itself |
+
+**Its mean is not the corpus mean and never will be.** These blocks were chosen for being unusually
+alive: the fast set reads 45.7% of content where the corpus reads 38.2%. The run prints that
+warning itself. Quote `--all` in anything that is written down; use `--fast` to decide whether
+`--all` is worth the forty minutes.
+
+A block here that joins the 93 painting nothing has stopped being a canary and should be replaced.
 
 Needs the corpus (`python tools/fetch-corpus.py`), a browser — Edge or Chrome, or
 `CUPRILEX_BROWSER` pointing at one — and the network, because every block loads GSAP from a CDN.

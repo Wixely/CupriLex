@@ -107,21 +107,25 @@ public static class Program
             var named = args.FirstOrDefault(a => !a.StartsWith("--")
                                                  && !IsOptionValue(args, a));
 
-            if (!args.Contains("--all") && named is null)
+            var fast = args.Contains("--fast");
+
+            if (!args.Contains("--all") && !fast && named is null)
             {
                 Usage();
                 return 2;
             }
 
-            var blocks = args.Contains("--all")
-                ? Corpus.All()
+            IReadOnlyList<Block> blocks = args.Contains("--all") ? Corpus.All()
+                : fast ? Corpus.Fast()
                 : [Corpus.Find(named!)];
 
             if (align) return await AlignAsync(blocks[0], samples, Engine.FindFonts());
 
             if (limit > 0) blocks = [.. blocks.Take(limit)];
 
-            return await RunAsync(blocks, samples, output, keepFrames, gallery);
+            if (fast) Canaries();
+
+            return await RunAsync(blocks, samples, output, keepFrames, gallery, fast);
         }
         catch (Exception ex)
         {
@@ -225,7 +229,8 @@ public static class Program
     }
 
     private static async Task<int> RunAsync(
-        IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames, bool gallery)
+        IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames, bool gallery,
+        bool fast = false)
     {
         var fonts = Engine.FindFonts();
         Directory.CreateDirectory(output);
@@ -265,6 +270,21 @@ public static class Program
         await File.WriteAllTextAsync(path, JsonSerializer.Serialize(report, Json));
 
         if (blocks.Count > 1) Summarise(scores);
+
+        // The one thing the fast set must never be allowed to do is read like the corpus. Its
+        // blocks were chosen for being unusually alive, so its mean sits far above the real one,
+        // and a number quoted from here into a commit message would be a lie told by omission.
+        if (fast)
+        {
+            Console.WriteLine();
+            Console.WriteLine("This is the FAST SET, not the corpus. These nine blocks were chosen "
+                              + "for being the first");
+            Console.WriteLine("place a change of each kind would show, which makes the mean above "
+                              + "unrepresentative on");
+            Console.WriteLine("purpose. Quote --all. Use this to decide whether --all is worth "
+                              + "running.");
+        }
+
         Console.WriteLine();
         Console.WriteLine($"wrote {path}");
 
@@ -565,18 +585,56 @@ public static class Program
 
     // ---- plumbing -----------------------------------------------------------------------------
 
+    /// <summary>What each block in the fast set is there to catch, printed before the run.
+    ///
+    /// <para>Printed rather than left in the source, because a subset whose reasons are invisible
+    /// decays into a list of nine arbitrary names within a release or two, and then into a subset
+    /// nobody trusts.</para>
+    /// </summary>
+    private static void Canaries()
+    {
+        Console.WriteLine("the fast set, and what each one is watching:");
+        Console.WriteLine();
+        foreach (var (block, why) in Corpus.Quick)
+        {
+            Console.WriteLine($"  {block}");
+            foreach (var line in Wrap(why, 88)) Console.WriteLine($"      {line}");
+        }
+        Console.WriteLine();
+    }
+
+    /// <summary>Word wrap, so a reason can be written as a sentence rather than as a column.</summary>
+    private static IEnumerable<string> Wrap(string text, int width)
+    {
+        var line = new System.Text.StringBuilder();
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length > 0 && line.Length + 1 + word.Length > width)
+            {
+                yield return line.ToString();
+                line.Clear();
+            }
+            if (line.Length > 0) line.Append(' ');
+            line.Append(word);
+        }
+        if (line.Length > 0) yield return line.ToString();
+    }
+
     private static void Usage()
     {
         Console.WriteLine("""
             How close is the engine to a browser, for one block or for all of them?
 
                 dotnet run --project harness -- <block>        score one block
+                dotnet run --project harness -- --fast         score the nine canaries
                 dotnet run --project harness -- --all          score the corpus
 
                 --samples N    times to sample across the declared duration (default 5)
                 --out DIR      where frames and baseline.json go (default harness/out)
                 --frames       keep every sample's images, not only the worst
                 --limit N      stop after N blocks, for a quick look
+                --fast         the nine blocks each change shows up in first, about 30s.
+                               For the loop, not for the record: its mean is not the corpus
 
                 --gallery      also write index.html: every block, worst first, with its images
                 --align        sweep the engine's clock against the browser's, for one block

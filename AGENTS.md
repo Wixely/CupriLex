@@ -1,4 +1,4 @@
-# Working on CupriLex
+﻿# Working on CupriLex
 
 Read [README.md](README.md) first — particularly the finding that the entire corpus is
 JavaScript-animated. Then this.
@@ -95,9 +95,15 @@ and the triptych that explains it. See [docs/HARNESS.md](docs/HARNESS.md).
 
 ```
 dotnet run --project harness -- <block>      # one block
-dotnet run --project harness -- --all        # the corpus, and a baseline.json
+dotnet run --project harness -- --fast       # nine canaries, 30s - for the loop
+dotnet run --project harness -- --all        # the corpus, 40min - for the record
 dotnet run --project harness -- --report harness/out/baseline.json
 ```
+
+**`--fast` is for the loop, never for the record.** Its nine blocks were chosen for being the
+first place each kind of change shows, which makes them unusually alive: the set reads 45.7% of
+content where the corpus reads 38.2%. Use it to decide whether `--all` is worth running; put only
+`--all` in a commit message, a document or a table.
 
 **Quote the second number, not the first.** The corpus mean flatters a composition that leaves
 most of the frame flat — one block renders as an empty rectangle in the engine and scores 99.4% on

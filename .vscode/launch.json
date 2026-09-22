@@ -1,9 +1,10 @@
-// Debug targets for the three instruments. Everything writes only to review/, harness/out or
+﻿// Debug targets for the three instruments. Everything writes only to review/, harness/out or
 // conformance/support, all of which are ignored, so a debugging session changes no tracked file.
 //
-// Start with "review: whole corpus" - it scores all 187 blocks, writes review/index.html, and
-// opens it when the run finishes. Ten minutes. "review: first 12 blocks" is the same in under a
-// minute.
+// Day to day, start with "review: the nine canaries" - nine blocks chosen so that each is the
+// first place a different kind of change shows up, in about thirty seconds, with the gallery
+// opened at the end. "review: whole corpus" is the same over all 187 blocks and takes forty
+// minutes: run it before a release, and whenever the fast set says something interesting.
 //
 // The harness needs a headless browser (Edge or Chrome, or CUPRILEX_BROWSER pointing at one) and
 // the network, because every corpus block pulls GSAP from a CDN. The corpus is not vendored: run
@@ -36,16 +37,14 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "review: first 12 blocks (quick look)",
+      "name": "review: the nine canaries -> review/index.html (30s)",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build harness",
       "postDebugTask": "open review gallery",
       "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
       "args": [
-        "--all",
-        "--limit",
-        "12",
+        "--fast",
         "--out",
         "review",
         "--gallery"
@@ -114,15 +113,13 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "harness: first 10 blocks only",
+      "name": "harness: the nine canaries (30s)",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build harness",
       "program": "${workspaceFolder}/harness/bin/Debug/net10.0/CupriLex.Harness.dll",
       "args": [
-        "--all",
-        "--limit",
-        "10"
+        "--fast"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"

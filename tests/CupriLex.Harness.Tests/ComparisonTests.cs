@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace CupriLex.Harness.Tests;
 
@@ -188,5 +188,45 @@ public class ComparisonTests
 
         Assert.Contains("10x10", thrown.Message);
         Assert.Contains("20x10", thrown.Message);
+    }
+
+    // ---- ink: how much a renderer painted, asked of one frame alone --------------------------
+
+    [Fact]
+    public void A_frame_of_one_colour_has_no_ink_whatever_that_colour_is()
+    {
+        // Including black. The measure is against the frame's OWN background, so a dark
+        // composition that renders as a dark rectangle must read as empty rather than as full -
+        // which is what comparing against white would have said, and several corpus blocks are
+        // exactly that.
+        Assert.Equal(0.0, Flat(64, 64, 255, 255, 255).Ink());
+        Assert.Equal(0.0, Flat(64, 64, 0, 0, 0).Ink());
+        Assert.Equal(0.0, Flat(64, 64, 34, 34, 34).Ink());
+    }
+
+    [Fact]
+    public void Ink_is_the_share_of_the_frame_that_is_not_its_background()
+    {
+        // 20x20 of black on a 100x100 light frame: 400 of 10,000 pixels.
+        var frame = WithBlackRectangle(Flat(100, 100, 240, 240, 240), 0, 0, 20, 20);
+
+        Assert.Equal(0.04, frame.Ink(), 3);
+    }
+
+    [Fact]
+    public void A_blank_engine_frame_is_distinguishable_from_a_wrong_one()
+    {
+        // The whole reason the measure exists. Both of these score badly against the reference,
+        // and they need completely different work: one drew the wrong thing, the other drew
+        // nothing. Only ink separates them.
+        var reference = WithBlackRectangle(Flat(100, 100, 240, 240, 240), 0, 0, 30, 30);
+        var blank = Flat(100, 100, 240, 240, 240);
+        var wrong = WithBlackRectangle(Flat(100, 100, 240, 240, 240), 60, 60, 30, 30);
+
+        Assert.True(Comparison.Of(reference, blank).ContentDiffering > 0.9);
+        Assert.True(Comparison.Of(reference, wrong).ContentDiffering > 0.9);
+
+        Assert.Equal(0.0, blank.Ink());
+        Assert.Equal(0.09, wrong.Ink(), 3);
     }
 }

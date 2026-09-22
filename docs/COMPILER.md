@@ -1,4 +1,4 @@
-# The GSAP compiler
+﻿# The GSAP compiler
 
 **Timelines in, `@keyframes` out, and a refusal by name for everything that could not come.**
 
@@ -121,12 +121,13 @@ JavaScript to run the callback.
 **Reach is not the score.** Frames decide the score, and a block whose every tween was read can
 still render wrongly. What it was worth, against the browser:
 
-| | before the compiler | with it, on 0.26.1 | on 0.27.0 |
-|---|---|---|---|
-| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** |
-| mean of frame, over blocks whose reference moves | 55.2% | 62.8% | 62.7% |
-| **mean of content**, all scored blocks | — | — | **38.1%** |
-| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 |
+| | before the compiler | with it, on 0.26.1 | on 0.27.0 | on 0.28.1 |
+|---|---|---|---|---|
+| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** | 185 of 187 |
+| mean of frame, over blocks whose reference moves | 55.2% | 62.8% | 62.7% | 62.7% |
+| **mean of content**, all scored blocks | — | — | 38.1% | **38.2%** |
+| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 | 147 of 185 |
+| blocks the engine paints almost nothing in | — | — | — | **93 of 185** |
 
 38 blocks animate where none did. The engine upgrade added two more scorable blocks and left the
 frame-wide mean where it was, which is itself worth knowing: on the 183 blocks scored in both runs

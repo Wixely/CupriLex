@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(CupriFaceVersion)' == ''">
-    <CupriFaceVersion>0.27.0</CupriFaceVersion>
+    <CupriFaceVersion>0.28.1</CupriFaceVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +27,10 @@
     <!-- Optional, and 32% of the corpus needs it: inline <svg> draws only when a
          document calls UseSvg(). Pinned to the engine, which is what defines it. -->
     <PackageReference Include="CupriFace.Svg" Version="$(CupriFaceVersion)" />
+    <!-- Also optional, and the corpus ships every one of its faces as .woff2: without
+         this the engine refuses them by name and all 157 blocks that bring a typeface
+         render in a substitute. -->
+    <PackageReference Include="CupriFace.Woff2" Version="$(CupriFaceVersion)" />
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
   </ItemGroup>
 

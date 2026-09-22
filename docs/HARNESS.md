@@ -1,4 +1,4 @@
-# The comparison harness: how right is a translated block?
+﻿# The comparison harness: how right is a translated block?
 
 One number per block, against a real browser, with the picture that explains it.
 
@@ -103,6 +103,23 @@ version did declare itself perfect, and a test caught it.
 unmeasured, by name, with the reason. Unmeasured and wrong are different things, and a zero would
 average into the corpus number as though it were a measurement.
 
+### The fifth number, which is not a comparison
+
+`engine ink` is the share of a frame the engine painted, measured against **its own** background
+rather than the browser's frame. It is the only line in the report that does not involve the
+browser at all, and it exists because every comparison confuses two failures that need completely
+different work:
+
+| | of content | ink |
+|---|---|---|
+| drew the wrong thing | bad | high |
+| drew nothing | bad | ~0 |
+
+The run prints `engine blank`: the blocks painting under 0.5% of their own frame. Those blocks
+cannot be improved by any amount of fidelity work — not a typeface, not an easing curve, not a
+colour — and without this line nothing in the report said which ones they were. It was added after
+the third correct fix in a row moved the corpus mean by zero; see **The baseline** below.
+
 ---
 
 ## The baseline
@@ -160,6 +177,29 @@ Same harness, same engine, same browser, with [the GSAP compiler](COMPILER.md) i
 | **over blocks whose reference moves** | **55.2%** | **62.8%** |
 | (both frame-wide; the content measure came later and reads 38.1%) | | |
 | engine rendered one still frame | **150 of 150** | 145 of 183 |
+
+### What the ink measure said, and why it is the last word here
+
+**CupriFace 0.28.1, 185 blocks scored:**
+
+| | |
+|---|---|
+| mean of content | 38.2% |
+| engine paints | 11.3% of the frame |
+| browser paints | 23.8% of the frame |
+| **blocks painting under 0.5% of their own frame** | **93 of 185** |
+
+Half the corpus draws essentially nothing. Not wrongly — nothing. Those blocks build or paint their
+composition from JavaScript, and the translation removes it, so what reaches the engine is a page
+with the content still to be made. No amount of work on colour, easing, timing or typography can
+move them.
+
+It took three correct fixes scoring zero to justify measuring this. A timeline cursor that a
+refusal had stopped advancing; an ease parameter that 44 blocks write and none of which was being
+read; and a WOFF 2 decoder that removed a font refusal from 157 blocks. Measured one at a time
+against the same corpus, each moved the mean by less than a tenth of a point, and the font fix
+changed the rendered pixels of **3 of 185 blocks** — because the blocks that carry a typeface are
+mostly the blocks that draw no text.
 
 Three of the four blocks still unmeasured are the same engine crash in a form the rewrite does not
 reach and a block whose own script throws in a browser. The one number that did **not** move the

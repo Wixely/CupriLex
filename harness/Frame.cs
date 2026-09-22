@@ -1,4 +1,4 @@
-using SkiaSharp;
+﻿using SkiaSharp;
 
 namespace CupriLex.Harness;
 
@@ -69,6 +69,28 @@ public sealed record Frame(int Width, int Height, byte[] Rgba)
             (byte)((top & 31) << 3 | 4));
 
         return _background.Value;
+    }
+
+    /// <summary>
+    /// The share of this frame's pixels that are not its own background colour.
+    ///
+    /// <para>How much this renderer PAINTED, asked of one frame alone rather than against
+    /// anything. Every other measure here is a comparison, and a comparison cannot tell a
+    /// translation that draws the wrong thing from one that draws nothing: both score badly and
+    /// they need completely different work. A block whose engine frame is 0.2% ink is not a
+    /// fidelity problem.</para>
+    /// </summary>
+    public double Ink()
+    {
+        var (r, g, b) = Background();
+        long ink = 0;
+        for (long i = 0; i + 3 < Rgba.LongLength; i += 4)
+        {
+            if (Math.Max(Math.Abs(Rgba[i] - r),
+                    Math.Max(Math.Abs(Rgba[i + 1] - g), Math.Abs(Rgba[i + 2] - b)))
+                > Comparison.Threshold) ink++;
+        }
+        return ink / (double)((long)Width * Height);
     }
 
     public SKBitmap ToBitmap()

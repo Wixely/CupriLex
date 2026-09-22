@@ -1,4 +1,4 @@
-namespace CupriLex.Conformance;
+﻿namespace CupriLex.Conformance;
 
 /// <summary>One document: what is in the body, and the rules that style it.</summary>
 public sealed record Doc(string Markup, string Css);
@@ -299,5 +299,63 @@ public static class Cases
             // other would be too; if it collapses to zero it is halfway across. Comparing at t=0
             // would show both on their first keyframe and prove nothing.
             At: 0.5),
+
+        // ---- the format every font pipeline emits ---------------------------------------------
+        // Asked through a REGISTERED FILE rather than an @font-face url, because the question is
+        // whether the engine can decode WOFF 2 at all and a url would also be asking about path
+        // resolution. Probe.FontFiles registers inter-latin-400-normal.woff2 for every case; this
+        // one is the only case that asks for that family by name.
+        //
+        // The control names a family that is deliberately NOT registered, and that choice is the
+        // whole case. Naming a face the harness already loads does not work: an unresolved family
+        // does not fall back to it, so the two halves differ whether or not the .woff2 decoded and
+        // the case reads 'yes' on an engine that cannot read WOFF 2 at all. Against an absent
+        // control both halves land on the SAME fallback when the decode fails, and differ only
+        // when 'Inter' really registered.
+        new("@font-face", "WOFF 2, registered face",
+            new Doc(Text, ".p{font-family:'Inter';font-size:40px;color:#d9642a;}"),
+            new Doc(Text, ".p{font-family:'NoSuchFaceExists';font-size:40px;color:#d9642a;}")),
+
+        // ---- the other half of the font question: how the bytes arrive -------------------------
+        // An @font-face src the document carries itself. docs/CORPUS.md says a data: URI works and
+        // proposes it as the rewrite for the 44 blocks that fetch a face over the network, which
+        // makes it load-bearing enough to measure rather than believe.
+        new("@font-face", "src: data: URI",
+            new Doc(Text, FaceRule("DataFace", DataUri) + ".p{font-family:'DataFace';"
+                          + "font-size:40px;color:#d9642a;}"),
+            new Doc(Text, ".p{font-family:'NoSuchFaceExists';font-size:40px;color:#d9642a;}")),
     ];
+
+    /// <summary>An <c>@font-face</c> rule, written the way a document does.</summary>
+    private static string FaceRule(string family, string src) =>
+        "@font-face{font-family:'" + family + "';src:url(" + src + ") format('woff2');}";
+
+    /// <summary>The corpus's Inter, inline. Built here rather than pasted in: 30KB of base64 in a
+    /// source file is unreadable and unverifiable, and the file it comes from is the same one the
+    /// registered-face case above loads, so the two cases cannot drift apart.</summary>
+    private static string DataUri =>
+        Woff2Path is { Length: > 0 } path && File.Exists(path)
+            ? "data:font/woff2;base64," + Convert.ToBase64String(File.ReadAllBytes(path))
+            : "data:font/woff2;base64,";
+
+    /// <summary>The corpus's Inter. Found here rather than handed in by the program: this list is
+    /// a static initialiser, so anything a caller sets arrives after it has already been built -
+    /// the first version took a settable property and every case was constructed with null.</summary>
+    public static string? Woff2Path
+    {
+        get
+        {
+            for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+            {
+                var blocks = Path.Combine(d.FullName, "corpus", "registry", "blocks");
+                if (!Directory.Exists(blocks)) continue;
+
+                return Directory.EnumerateFiles(blocks, "inter-latin-400-normal.woff2",
+                        SearchOption.AllDirectories)
+                    .Concat(Directory.EnumerateFiles(blocks, "*.woff2", SearchOption.AllDirectories))
+                    .FirstOrDefault();
+            }
+            return null;
+        }
+    }
 }

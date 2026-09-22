@@ -1,4 +1,4 @@
-# Conformance: knowing what the engine supports, per version
+﻿# Conformance: knowing what the engine supports, per version
 
 A translator that works around a limitation the engine no longer has is producing different output
 than the author wrote, for no reason. A translator that *fails* to work around a limitation the
@@ -90,6 +90,42 @@ probe now enables the same packages the harness renders with, and the matrix say
 
 ---
 
+## What it produced the second time, which was nothing
+
+0.28.1's headline is WOFF 2: the format every font pipeline emits, refused by name until then, and
+157 of the 187 blocks bring one. Run against 0.27.0 the matrix said:
+
+```
+dotnet run --project conformance -- --compare conformance/support/0.27.0.json conformance/support/0.28.1.json
+
+  nothing moved.
+```
+
+Which was true, and useless. **The matrix only ever answers the questions it contains, and it had
+no question about fonts.** Forty-four cases covering colour, layout, selectors and timing, and a
+release that changed how every typeface in the corpus loads went past without a mark. A matrix that
+says "nothing moved" is making a claim about its own coverage as much as about the engine, and
+nothing in the output distinguished the two.
+
+Two cases now ask it, and both had to be argued with before they were worth anything:
+
+- **A control that is absent, not different.** The first version put the woff2 face against a face
+  the harness already registers. It read `yes` on an engine with no decoder at all, because an
+  unresolved family does not fall back to a named one — the two documents differed either way. The
+  control now names a family that does not exist, so both halves land on the *same* fallback when
+  the decode fails and differ only when it succeeds. Verified both directions: `NO` with the
+  decoder uninstalled, `yes` with it.
+- **A refusal is an answer.** `LoadFont` on a .woff2 throws on an engine without the decoder, which
+  killed every case in the run — 0.27.0 could not produce a matrix file at all. Caught, the face
+  simply is not registered and the case that asks for it reads `NO`, which is the truth.
+
+One thing found on the way, worth knowing before designing any A/B around it: **`UseWoff2()`
+installs a process-wide decoder, not a document-scoped one.** Removing the call from one of three
+sites and re-running measures nothing, because the first document that asked for it has already
+switched the process on.
+
+---
+
 ## How a translator uses it
 
 Every rewrite rule declares what it is working around:
@@ -116,7 +152,7 @@ the list of things to reconsider, and it is reviewable.
 
 ```
 dotnet run --project conformance -- --out conformance/support
-dotnet run --project conformance -- --compare 0.26.1 0.27.0
+dotnet run --project conformance -- --compare 0.27.0 0.28.1
 ```
 
 The probe renders; it does not read the engine's source or its release notes. Every answer is a

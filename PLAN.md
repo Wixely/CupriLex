@@ -1,4 +1,4 @@
-# CupriLex — the plan
+﻿# CupriLex — the plan
 
 Ordered so that each milestone produces something measurable, and so nothing is built on a guess
 about the target. Read [README.md](README.md) and [docs/CORPUS.md](docs/CORPUS.md) first — the
@@ -126,7 +126,7 @@ linear — eight samples, chosen arbitrarily and still owed a measurement.
 |---|---|---|
 | blocks scored | 150 of 187 | **183 of 187** |
 | mean of frame, over blocks whose reference moves | 55.2% | 62.8% |
-| **mean of content** (the measure that replaced it) | — | **38.1%** |
+| **mean of content** (the measure that replaced it) | — | **38.2%** on 0.28.1 |
 | blocks rendering one still frame | **150 of 150** | 145 of 183 |
 
 38 blocks now animate and 33 more can be loaded at all. The mean is not a like-for-like

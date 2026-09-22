@@ -1,6 +1,7 @@
-using CupriFace;
+﻿using CupriFace;
 using CupriFace.Diagnostics;
 using CupriFace.Svg;
+using CupriFace.Woff2;
 using SkiaSharp;
 
 namespace CupriLex.Conformance;
@@ -44,6 +45,15 @@ public static class Probe
     /// <summary>A face is registered from here when there is one, so text-shaped probes measure
     /// the engine rather than whatever the machine happens to have installed.</summary>
     public static string? FontDirectory { get; set; }
+
+    /// <summary>Individual font files to register as well, named one at a time.
+    ///
+    /// <para>A format question cannot be asked through <see cref="FontDirectory"/>, because the
+    /// answer there is invisible: a .woff2 the engine refuses simply does not appear, and the text
+    /// renders in whatever else the directory held with nothing saying why. Registering one named
+    /// file and asking for its family by name turns the refusal into a pixel difference, which is
+    /// the only currency this matrix deals in.</para></summary>
+    public static IReadOnlyList<string> FontFiles { get; set; } = [];
 
     public static IReadOnlyList<Support> All() => [.. Cases.All.Select(Run)];
 
@@ -121,7 +131,7 @@ public static class Probe
             // "" and not null: a null stylesheet turned every CSS check off through 0.25.0, and
             // passing it explicitly is a habit worth keeping.
             return [.. CupriDoctor.Check(html, string.Empty, width: Width, height: Height,
-                    configure: document => document.UseSvg()).Findings
+                    configure: document => { document.UseSvg(); document.UseWoff2(); }).Findings
                 .Where(f => f.Message.Contains(name, StringComparison.OrdinalIgnoreCase))
                 .Select(f => $"{f.Code}: {f.Message}")];
         }
@@ -144,11 +154,25 @@ public static class Probe
 
             // The optional packages this repository actually renders with, so the matrix measures
             // the engine as it is used rather than a stripped-down one. <svg> draws only for a
-            // document that has asked for it.
+            // document that has asked for it, and a .woff2 face decodes only for one
+            // that has called UseWoff2().
             doc.UseSvg();
+            doc.UseWoff2();
 
             if (FontDirectory is { Length: > 0 } dir && Directory.Exists(dir))
                 doc.LoadFonts(dir, recursive: true);
+
+            foreach (var file in FontFiles)
+            {
+                // A refusal is an ANSWER here, not a failure. An engine with no WOFF 2 decoder
+                // throws NotSupportedException from this call, and letting that escape would kill
+                // every case in the matrix on exactly the versions the matrix exists to compare
+                // against - 0.27.0 could not produce a file at all. Swallowed, the face simply is
+                // not registered, the family falls back, and the case that asks for it by name
+                // reads NO, which is the truth.
+                try { doc.LoadFont(file); }
+                catch (NotSupportedException) { }
+            }
 
             // Settle BEFORE the frame you want. Settling re-lays-out from zero, so animating first
             // and settling after throws the frame away and renders t=0 - which reads exactly like

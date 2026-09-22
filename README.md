@@ -1,4 +1,4 @@
-# CupriLex
+﻿# CupriLex
 
 **Browser HTML in. CupriFace-safe HTML out. A report of everything that could not come with it.**
 
@@ -78,16 +78,23 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.27.0, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
+On CupriFace 0.28.1, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
 | blocks scored | **185 of 187** |
-| **mean of content** | **38.1%** — the number to beat |
+| **mean of content** | **38.2%** — the number to beat |
 | median | 40.0% |
 | mean of frame | 67.0% |
 | where it is wrong, off by | 33.0% of full scale |
 | blocks that render one still frame | 147 of 185 |
+| **blocks the engine paints almost nothing in** | **93 of 185** |
+
+That last row is the constraint, and it was not visible until it was measured. Half the corpus
+renders under 0.5% of its own frame — the composition is built or painted by the JavaScript that
+had to be removed — so those blocks cannot be improved by fidelity work of any kind. Three correct
+fixes in a row moved the mean by nothing for this reason: a timeline cursor, an easing parameter,
+and a WOFF 2 font decoder that changed the pixels of exactly **3 of 185** blocks.
 
 **Read the content number, not the frame number.** They differ by 29 points because these
 compositions paint on a small share of a large frame, so counting the empty background rewards a

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -31,6 +31,12 @@ public sealed record Sample(
 /// <param name="EngineMoves">The same for the engine's frames. Zero means the engine rendered the
 /// same image at every time - no motion at all, which is the expected baseline before the
 /// compiler.</param>
+/// <param name="ReferenceInk">The same measure taken of the browser, so the engine's can be
+/// read. 3% ink is a sparse composition, not a broken render, and only the pair says which.</param>
+/// <param name="EngineInk">How much of the frame the engine PAINTED, mean over the samples,
+/// measured against the engine's own background rather than the browser's frame. The one number
+/// here that is not a comparison, and it separates the two failures a comparison confuses: drawing
+/// the wrong thing, and drawing nothing at all.</param>
 /// <param name="Failure">Set when there is no score: no reference, or a document the engine
 /// refused. Never scored as zero - unmeasured is not the same as wrong.</param>
 public sealed record Score(
@@ -48,6 +54,8 @@ public sealed record Score(
     double Worst,
     double ReferenceMoves,
     double EngineMoves,
+    double ReferenceInk,
+    double EngineInk,
     double Seconds,
     IReadOnlyList<Sample> Samples,
     IReadOnlyList<string> Refusals,
@@ -293,7 +301,8 @@ public static class Program
         var clock = Stopwatch.StartNew();
 
         Score Failed(string why) => new(block.Name, block.Width, block.Height, block.Duration,
-            block.DurationSource, 0, 0, 0, 0, 0, 0, 0, 0, 0, Math.Round(clock.Elapsed.TotalSeconds, 2),
+            block.DurationSource, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            Math.Round(clock.Elapsed.TotalSeconds, 2),
             [], [], [], why);
 
         Reference reference;
@@ -371,6 +380,8 @@ public static class Program
             Math.Round(1 - comparisons.Max(s => s.ContentDiffering), 5),
             Math.Round(Movement(reference.Frames), 5),
             Math.Round(Movement(rendered.Frames), 5),
+            Math.Round(reference.Frames.Average(f => f.Ink()), 5),
+            Math.Round(rendered.Frames.Average(f => f.Ink()), 5),
             Math.Round(clock.Elapsed.TotalSeconds, 2),
             comparisons, translated.Refusals, rendered.Diagnostics, null);
     }
@@ -496,6 +507,17 @@ public static class Program
                           + "of the frame replaced rather than shifted");
         Console.WriteLine($"engine still     {scored.Count(s => s.EngineMoves == 0)} of {scored.Length} "
                           + "blocks rendered the same frame at every time");
+
+        // The line that says which KIND of failure this corpus has, and the only one here that
+        // does not involve the browser at all. A block the engine paints almost nothing in cannot
+        // be improved by any amount of fidelity work - not a typeface, not an easing curve - and
+        // for two releases running a correct fix moved the mean by nothing because of it.
+        var blank = scored.Where(s => s.EngineInk < 0.005).ToArray();
+        Console.WriteLine($"engine blank     {blank.Length} of {scored.Length} "
+                          + "blocks paint under 0.5% of their own frame: nothing to compare");
+        Console.WriteLine($"engine ink       {Percent(scored.Average(s => s.EngineInk))} "
+                          + $"of the frame painted, against {Percent(scored.Average(s => s.ReferenceInk))} "
+                          + "in the browser");
 
         // The qualification that keeps the headline honest. editorial-flash-overlay scores 100%
         // and its reference does not change by a single pixel across the whole composition: the

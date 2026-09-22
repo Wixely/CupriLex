@@ -1,7 +1,9 @@
-using CupriFace;
+﻿using CupriFace;
 using CupriFace.Components;
 using CupriFace.Diagnostics;
 using CupriFace.Svg;
+using CupriFace.Text;
+using CupriFace.Woff2;
 
 namespace CupriLex.Harness;
 
@@ -37,6 +39,16 @@ public static class Engine
         // out and stay empty, which is what they did through every measurement before 0.27.0.
         document.UseSvg();
 
+        // Every face in the corpus arrives as .woff2 - 157 of the 187 blocks bring one - and the
+        // engine refused them all by name until 0.28.1 shipped the decoder, so the text was
+        // measured and drawn in a substitute at different widths.
+        //
+        // The call installs a PROCESS-WIDE decoder rather than a per-document one, which matters
+        // when reasoning about a measurement: once any document in the run has asked for it, every
+        // later document decodes too. An A/B of this line has to remove all of them, including the
+        // one CupriDoctor is configured with below, or the B side quietly gets the A behaviour.
+        document.UseWoff2();
+
         if (fontDirectory is { Length: > 0 } fonts && Directory.Exists(fonts))
             document.LoadFonts(fonts, recursive: true);
 
@@ -55,7 +67,40 @@ public static class Engine
             frames.Add(Frame.FromImage(image));
         }
 
-        return new Rendered(frames, Diagnose(html, block));
+        return new Rendered(frames, [.. Diagnose(html, block), .. Fonts(document)]);
+    }
+
+    /// <summary>
+    /// What the engine made of the document's typefaces.
+    ///
+    /// <para>Worth its own line in every report. The corpus asks for Inter 104 times, Space Mono
+    /// 33, Bebas Neue 28; the faces the harness registers are Noto Sans and Noto Sans Bold. A
+    /// block whose families all fell back is being scored in a typeface it never asked for, and
+    /// nothing else in the report would have said so.</para>
+    /// </summary>
+    private static IReadOnlyList<string> Fonts(CupriDocument document)
+    {
+        var report = document.FontReport;
+        var lines = new List<string>();
+
+        var fellBack = report.Resolutions
+            .Where(r => r.Source != FontSource.Registered)
+            .Select(r => r.Family)
+            .Distinct()
+            .ToArray();
+
+        if (fellBack.Length > 0)
+            lines.Add($"FONT x{fellBack.Length}: asked for {string.Join(", ", fellBack.Take(6))}"
+                      + (fellBack.Length > 6 ? ", …" : "")
+                      + $" — registered: {string.Join(", ", report.RegisteredFamilies.Take(4))}");
+
+        foreach (var problem in report.Problems.Take(4))
+            lines.Add($"FONT '{problem.Family}': {problem.Reason}"
+                      + (problem.Sources.Count > 0
+                          ? " — " + Path.GetFileName(problem.Sources[0])
+                          : ""));
+
+        return lines;
     }
 
     private static IReadOnlyList<string> Diagnose(string html, Block block)
@@ -69,7 +114,7 @@ public static class Engine
             // none of them and reports markup as undrawable that this harness draws perfectly
             // well. It is the same mistake as checking one document and rendering another.
             return [.. CupriDoctor.Check(html, string.Empty, width: block.Width, height: block.Height,
-                    configure: document => document.UseSvg()).Findings
+                    configure: document => { document.UseSvg(); document.UseWoff2(); }).Findings
                 .GroupBy(f => f.Code)
                 .OrderByDescending(g => g.Count())
                 .Select(g => $"{g.Key} x{g.Count()}: {g.First().Message}")];
@@ -85,6 +130,15 @@ public static class Engine
     /// makes a text-heavy corpus score differently on two machines for no engine reason.</summary>
     public static string? FindFonts()
     {
+        // An override, because the faces the engine is given are a variable of the measurement and
+        // not a fact about it. The corpus asks for Inter 104 times, Space Mono 33, Bebas Neue 28;
+        // the directory found below holds Noto Sans and nothing else, so every block is being
+        // scored in a typeface it did not ask for. Pointing this somewhere else is how that gets
+        // quantified rather than assumed.
+        if (Environment.GetEnvironmentVariable("CUPRILEX_FONTS") is { Length: > 0 } chosen
+            && Directory.Exists(chosen))
+            return Path.GetFullPath(chosen);
+
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
         {
             foreach (var candidate in new[]

@@ -1,4 +1,4 @@
-# What translates, what is rewritten, and what is refused
+﻿# What translates, what is rewritten, and what is refused
 
 Three outcomes, and the third is as important as the others. Anything CupriLex cannot carry must
 appear in the report **by name, with the line it was on** — because a video missing its transitions
@@ -74,6 +74,7 @@ so the rules that worked around them have been **deleted**, which is the outcome
 | a spaced `rgb()` crashed the document from three parsers, costing **35 blocks** their score entirely | rewritten to hex | fixed in **0.26.2** (#196); rule deleted |
 | `inset: 0` was ignored, and so were the four longhands, so a full-bleed overlay had no size — **115 blocks** | rewritten to a percentage size | fixed in **0.27.0** (#200); rule deleted |
 | `backdrop-filter`, 3D transforms and repeating gradients were accepted in silence and painted nothing | nothing to do but report | **0.27.0** reports them (#201); still not painted |
+| every face in the corpus is a `.woff2`, refused by name, so **157 blocks** drew their text in a substitute | nothing to do but report | fixed in **0.28.1** (#209), through the optional `CupriFace.Woff2` package and a `UseWoff2()` call |
 | **13 blocks** hold their whole composition in a `<template>`, inert until a host clones it in | inlined | **still needed** — not an engine gap; template content is inert by specification |
 
 The one rewrite left is the last row. The other three lines are the reason the conformance matrix

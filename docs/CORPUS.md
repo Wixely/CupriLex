@@ -1,4 +1,4 @@
-# The corpus
+﻿# The corpus
 
 187 HyperFrames blocks, plus 220 components and 9 examples. Real, designed, animated compositions
 by people who were not thinking about this engine — which is exactly what makes them worth testing
@@ -83,13 +83,13 @@ Measured against **CupriFace 0.26.1** by `conformance/` — see
 | `var()` | 73 — 39% | **works**, fallbacks included |
 | `<svg>` | **61 — 32%** | **works** — as of 0.27.0, through the optional `CupriFace.Svg` package and a `UseSvg()` call. Shapes become real paths; gradients, `<text>` and `<use>` do not. |
 | 3D transforms | **54 — 28%** | **NOT rendered** — `rotateY`, `translate3d` and `perspective` all paint nothing. Reported as `CF0051` since 0.27.0, where before they were accepted in silence. |
-| external font | 44 — 23% | download and embed as `@font-face` with a `data:` URI — **works** |
+| external font | 44 — 23% | download and embed as `@font-face` with a `data:` URI — **works**, measured |
 | `clip-path` | **40 — 21%** | **NOT rendered** |
 | `<canvas>` | **38 — 20%** | drawn by JavaScript. Untranslatable — name it and refuse. |
 | `filter:` | 37 — 19% | **works** — `blur()` and `brightness()` both paint |
 | `display: grid` | 27 — 14% | **works** |
 | `<img>` | 23 — 12% | becomes `<cupri-image>` |
-| `@font-face` | 16 — 8% | **works**, `data:` URIs included |
+| `@font-face` | 16 — 8% | **works**, `data:` URIs included — but only as of **0.28.1** for the `.woff2` every one of them carries, through the optional `CupriFace.Woff2` package and a `UseWoff2()` call. Refused by name before that, and the text drew in a substitute. |
 | `backdrop-filter` | 12 — 6% | **NOT rendered** |
 | `mix-blend-mode` | 11 — 5% | **NOT rendered** |
 | repeating gradient | 5 — 2% | **NOT painted**; rewrite to hard stops |

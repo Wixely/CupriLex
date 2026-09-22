@@ -159,7 +159,9 @@ size**, and **`<template>` inlined**. What is left:
 - **`letter-spacing`**, at 80% of blocks, still ignored by the engine and still only reported
 - repeating gradients → hard stops
 - animated `left`/`top` → `transform`
-- external fonts → downloaded and embedded as `@font-face` with a `data:` URI
+- external fonts → **fetched and carried in the `.cutpkg` as files**, not embedded as a `data:`
+  URI, and not a markup rewrite at all. See Milestone 5. Measured at under a third of a point on
+  the score, so it is scheduled as output quality rather than as progress
 - `eventCallback` / `call` → CupriCut `data-cut-event`
 - `data-composition-variables` → kept, since a translated block should still be a template
 
@@ -186,6 +188,61 @@ tool at render time.
 
 Plus the report, which is the thing that makes the output trustworthy.
 
+### Fonts travel as files, not as `data:` URIs
+
+The package carries the face as bytes and the host registers it. The CSS is left exactly as the
+author wrote it: `font-family: 'Inter'` resolves because a face whose internal family name is Inter
+has been registered, and the document is never touched.
+
+Measured rather than assumed. Pointing the harness at a directory holding the corpus's own Inter
+and re-running is the same act a host performs on an unpacked `.cutpkg`, and the fallback stops:
+
+```
+FONT x1: asked for Inter - registered: noto sans        before
+                         - registered: ..., inter       after, and the line is gone
+```
+
+The alternative was to download each face and rewrite it into the document as an `@font-face` with
+a base64 `src`. That also works - the conformance matrix has a case for it, and it passes - but it
+is worse on every axis that matters: a third larger than the bytes it carries, duplicated into
+every block that shares a family, and it edits markup that otherwise survives translation
+unchanged. The only thing it buys is a document that is self-contained on its own, and a `.cutpkg`
+is already the unit of self-containment.
+
+**What it is worth on the score: nothing, and that is not a reason to skip it.** Eight blocks
+measured both ways, chosen as the ones a missing Inter should hurt most:
+
+| | before | after |
+|---|---|---|
+| `us-map-bubble` | 95.5% | 95.5% |
+| `spain-map` | 82.2% | 82.2% |
+| `us-map-flow` | 84.3% | 84.0% |
+| `code-snippet-visual-studio-light` | 80.4% | 80.3% |
+
+Under a third of a point either way, and twice negative. The same result as the WOFF 2 decoder, for
+the same reason: these compositions paint text on a small share of a large frame, so a typeface is
+a small number of pixels however wrong it is. It still has to be right. A delivered package that
+renders a designed composition in Noto Sans is visibly wrong to the person who made it, and no
+pixel measure this repository has is going to say so.
+
+So this is **output quality, scheduled with Milestone 5** - not a way to move the corpus number,
+and it should not be sold as one.
+
+### What is still missing, which is the bytes
+
+Registering a face only helps when there is a file. Of the families the corpus asks for and does
+not get, the corpus itself ships only Inter:
+
+| family | blocks | have the bytes? |
+|---|---|---|
+| Inter | 40 | yes, three weights, in one block's assets |
+| JetBrains Mono, Space Mono, Bebas Neue, Lato | 69 | no - open licences, fetchable at translate time |
+| SF Mono, Menlo, Helvetica Neue, Georgia | 26 | **no, and never** - proprietary system faces |
+
+The last row is the one with no good answer. A block that asks for Menlo cannot be packaged with
+Menlo, so the package has to carry a substitute and the report has to say which, by name, every
+time. That is a decision about honesty rather than about fonts.
+
 ---
 
 ## Decided — do not re-open
@@ -207,10 +264,14 @@ Plus the report, which is the thing that makes the output trustworthy.
   into stops, because `animation-timing-function` is per-animation and an element gets one
   animation. Not settled in number: it is eight stops per eased tween because eight was a round
   number, and the comparison harness is what should decide it.
-- **Whether `<svg>` survives.** Answered, and the answer is no: the engine does not draw it, and
-  32% of blocks use it. Rasterising at import is the only route left, and nobody has tried it.
-- **What to do about `letter-spacing`.** 80% of blocks, ignored by the engine. Report every time,
-  approximate with word spacing, or press for engine support. Currently: report.
+- ~~**Whether `<svg>` survives.**~~ **Closed by 0.27.0**, and the answer reversed: the engine does
+  draw inline `<svg>`, through the optional `CupriFace.Svg` package and a `UseSvg()` call. 32% of
+  blocks use it and they now get real paths. Gradients, `<text>` and `<use>` still do not draw.
+- ~~**What to do about `letter-spacing`.**~~ **Closed by 0.27.0**: implemented in the engine, so
+  there is nothing to approximate and nothing to report. It was 80% of blocks.
+- ~~**External fonts.**~~ **Closed**: the package carries the bytes and the host registers them.
+  See Milestone 5. Both halves were measured first - `.woff2` decodes as of 0.28.1, and a `data:`
+  URI works too and was rejected anyway for being the larger, more invasive way to do it.
 - **Blocks that build timelines from data.** Answered as far as measurement can: a loop is refused
   and counted, and the loop-shaped refusals are now among the largest groups. The question left is
   whether to unroll a loop over a *literal* array, which is statically resolvable, and how much of

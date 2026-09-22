@@ -83,7 +83,7 @@ Measured against **CupriFace 0.26.1** by `conformance/` — see
 | `var()` | 73 — 39% | **works**, fallbacks included |
 | `<svg>` | **61 — 32%** | **works** — as of 0.27.0, through the optional `CupriFace.Svg` package and a `UseSvg()` call. Shapes become real paths; gradients, `<text>` and `<use>` do not. |
 | 3D transforms | **54 — 28%** | **NOT rendered** — `rotateY`, `translate3d` and `perspective` all paint nothing. Reported as `CF0051` since 0.27.0, where before they were accepted in silence. |
-| external font | 44 — 23% | download and embed as `@font-face` with a `data:` URI — **works**, measured |
+| external font | 44 — 23% | **fetch and carry in the `.cutpkg` as a file**, and leave the CSS alone: `font-family: 'Inter'` resolves against a registered face. A `data:` URI also works, and was measured and rejected as larger and more invasive. Worth under a third of a point on the score either way. |
 | `clip-path` | **40 — 21%** | **NOT rendered** |
 | `<canvas>` | **38 — 20%** | drawn by JavaScript. Untranslatable — name it and refuse. |
 | `filter:` | 37 — 19% | **works** — `blur()` and `brightness()` both paint |

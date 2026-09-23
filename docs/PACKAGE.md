@@ -1,0 +1,108 @@
+# The output: a translated block as a `.cutpkg`
+
+```
+dotnet run --project harness -- <block> --package out
+dotnet run --project harness -- --all --package out
+```
+
+Renders nothing. A package is the end of the pipeline, not a measurement, so it costs no browser
+and no engine.
+
+---
+
+## What it is
+
+A `.cutpkg` is **CupriCut's format, not this repository's**: a zip holding `project.json` — the
+same schema a `.cut.json` parses to — and an `assets/` folder. CupriLex writes one; CupriCut reads
+it. Nothing about it is ours to design.
+
+```
+project.json                              the manifest
+report.md                                 what came across and what did not
+assets/inter-latin-400-normal.woff2       the bytes, stored rather than deflated
+assets/logo.png
+```
+
+Each asset is keyed by **the name the HTML and CSS refer to it by**. A block's
+`url('assets/fonts/inter-400.woff2')` becomes `url('inter-400.woff2')` in the package, and the
+manifest maps that key to its entry. CupriCut hands the bytes back as a `data:` URI when it opens
+the package, which is why the markup can carry no path at all.
+
+**Nothing depends on this tool at render time.** That is the whole reason to write a package rather
+than a document and a folder: a project that has been imported is just a project, and CupriLex is
+not in the loop when it is rendered, copied or committed.
+
+---
+
+## Three decisions it makes
+
+**Fonts travel as files, not as base64.** Decided in [PLAN.md](../PLAN.md) and measured first: the
+document's own `@font-face` is left exactly as the author wrote it and the bytes ride in the
+container. Inlining them adds a third to their size, duplicates a family into every block that
+shares it, and edits markup that otherwise survives translation untouched.
+
+**A package runs the longer of the declared duration and the motion.** A third of this corpus
+declares a duration its own timeline does not span, and the two failures are not symmetrical: too
+long holds a last frame, too short cuts the composition off mid-move. The disagreement is written
+into the report rather than resolved silently, because only the author knows which number was the
+mistake.
+
+**`data-start` and `data-duration` are removed.** Those attributes are how a *loose* HTML block
+declares its own length — it has nowhere else to put it — and a package has `render.duration`.
+Carrying both states one fact twice, and the second copy costs something real: CupriCut reads them
+as "this element is a timeline window" and then needs that element's one animation slot for itself,
+which it reports as `CUT003`. 13 of the 187 corpus blocks were that error before this. Nothing is
+lost by removing them, because a browser composition puts its motion in a timeline and has never
+heard of CupriCut's windows.
+
+A reference that names no file on disk is **reported and left exactly as written**. A broken link
+that is named can be fixed; one that has been quietly removed cannot.
+
+---
+
+## The report is a deliverable
+
+`report.md` travels inside the package because that is the only place it stays attached to the
+thing it describes. A refusal list printed to a terminal is gone by the time anyone asks why a
+rendered composition is missing its transitions.
+
+It opens with what was **carried** — elements animated, assets, size, duration — and only then with
+what was not, grouped by shape so that thirty refusals for one reason are visibly different from
+thirty for thirty reasons. A clean translation says so in words rather than showing an empty
+section, because an empty report means perfect or lying and the file has to say which.
+
+The manifest's `meta.notes` carries the same summary in a form CupriCut shows without unzipping.
+
+---
+
+## Verified against the reader
+
+The corpus packages as 187 files and 15.9 MB. Opened with CupriCut's own CLI:
+
+```
+cupricut inspect claude-exchange.cutpkg
+
+  claude-exchange.cutpkg  1080x1920 at 30 fps, 21.4s
+  REFERENCES
+    eb-garamond-latin-400-normal.woff2
+    …
+```
+
+The size, the frame rate, the duration and every asset come back. `cupricut lint` reports no
+`CUT003`.
+
+**It does not render there yet, and that is not a packaging problem.** CupriCut pins CupriFace
+**0.26.1**, five releases behind, so it rejects these documents for three things the engine has
+since fixed: WOFF 2 fonts need the decoder that shipped in 0.28.1, `inset` is ignored until 0.27.0,
+and a `border` shorthand with an `rgba()` colour crashes the CSS parser until 0.26.2 — the same
+crash this repository wrote a rewrite rule for and deleted when it landed. Upgrading CupriCut is
+what makes these packages render.
+
+---
+
+## The schema is copied, not referenced
+
+`project.json` is written from a small DTO in `compiler/Package.cs` rather than from CupriCut's
+`CutProject`. A project reference would make the compiler need a renderer in order to build, which
+is a worse trade than the drift it would prevent. The cost is real, so the field names are asserted
+one at a time in `PackageTests` against a package that is written and read back.

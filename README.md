@@ -134,8 +134,13 @@ Four verbs — `to`, `set`, `fromTo`, `from` — are 2618 of the calls. That is 
 - **Not a GSAP implementation.** A bounded subset, compiled ahead of time. Anything outside it is
   refused and named, never approximated.
 - **Not a runtime dependency.** A composition is translated **once**, into a `.cutpkg` that is
-  already self-contained. A project that has been imported is just a project; nothing depends on
-  this tool at render time.
+  already self-contained — one zip with the markup, the assets, the fonts and the report inside.
+  A project that has been imported is just a project; nothing depends on this tool at render time.
+  See [docs/PACKAGE.md](docs/PACKAGE.md).
+
+  ```
+  dotnet run --project harness -- --all --package out
+  ```
 - **Not a general HTML-to-CupriFace converter**, though it may become one. The corpus is the
   target, and the corpus is what keeps the scope honest.
 

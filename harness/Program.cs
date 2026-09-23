@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CupriLex.Compiler;
 
 namespace CupriLex.Harness;
 
@@ -121,6 +122,9 @@ public static class Program
 
             if (align) return await AlignAsync(blocks[0], samples, Engine.FindFonts());
 
+            // Packaging renders nothing, so it comes before the browser is launched.
+            if (Option(args, "--package") is { Length: > 0 } into) return Packaging(blocks, into);
+
             if (limit > 0) blocks = [.. blocks.Take(limit)];
 
             if (fast) Canaries();
@@ -132,6 +136,72 @@ public static class Program
             Console.Error.WriteLine("cuprilex-harness: " + ex.Message);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Translated blocks written out as <c>.cutpkg</c> files.
+    ///
+    /// <para>Here rather than in the compiler because a package needs facts the compiler has no
+    /// business knowing: how wide a block is, how long it runs, and where its assets sit. That is
+    /// corpus metadata, and this is the project that reads it. The format itself stays in
+    /// <see cref="Package"/> - the compiler owns what a translation becomes, and the harness owns
+    /// what a block is.</para>
+    ///
+    /// <para>Nothing is rendered. A package is the end of the pipeline and not a measurement, so
+    /// it costs no browser and no engine.</para>
+    /// </summary>
+    private static int Packaging(IReadOnlyList<Block> blocks, string into)
+    {
+        Directory.CreateDirectory(into);
+
+        Console.WriteLine($"packaging {blocks.Count} block(s) into {into}");
+        Console.WriteLine();
+
+        long total = 0;
+        var refused = 0;
+        var missing = 0;
+
+        foreach (var block in blocks)
+        {
+            var directory = block.Directory;
+
+            // Translated WITHOUT a directory, so its URLs stay as the author wrote them. The
+            // harness rebases them to absolute paths for rendering, which is right there and
+            // exactly wrong here: a package needs the relative reference in order to flatten it
+            // to an asset key, and an absolute path would travel to a machine that has no such
+            // path on it.
+            var translated = Translator.Of(File.ReadAllText(block.Path));
+
+            var composition = new Composition(
+                block.Name, translated.Html, translated.Motion, translated.Refusals,
+                block.Width, block.Height, block.Duration,
+                Description: $"Translated from {Path.GetFileName(block.Path)} by CupriLex.");
+
+            var written = Package.Write(composition, directory,
+                Path.Combine(into, block.Slug + Package.Extension));
+
+            total += written.Bytes;
+            refused += translated.Refusals.Count;
+            missing += written.Missing.Count;
+
+            Console.WriteLine($"{block.Name,-34}  {written.Bytes / 1024.0,8:n0} KB  "
+                              + $"{written.Assets.Count,3} asset(s)  "
+                              + $"{translated.Motion.Elements,3} animated  "
+                              + $"{translated.Refusals.Count,3} refused"
+                              + (written.Missing.Count > 0
+                                  ? $"  {written.Missing.Count} MISSING"
+                                  : ""));
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"{blocks.Count} package(s), {total / 1024.0 / 1024.0:n1} MB, "
+                          + $"{refused} refusal(s) recorded in them");
+
+        if (missing > 0)
+            Console.WriteLine($"{missing} reference(s) named a file that was not beside the block. "
+                              + "Each package names its own; none were silently dropped.");
+
+        return 0;
     }
 
     /// <summary>
@@ -639,6 +709,8 @@ public static class Program
                 --gallery      also write index.html: every block, worst first, with its images
                 --align        sweep the engine's clock against the browser's, for one block
                 --report FILE  re-summarise a finished run's baseline.json, rendering nothing
+                --package DIR  write each block as a .cutpkg and render nothing: one file with
+                               its assets, its fonts and its report inside
 
             Needs the corpus: python tools/fetch-corpus.py
             """);

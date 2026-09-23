@@ -191,13 +191,37 @@ And the compiler's own unfinished business, which the refusal counts rank:
 
 ---
 
-## Milestone 5 — output
+## Milestone 5 — output *(done)*
 
 A translated block becomes a **`.cutpkg`**: one file, assets and fonts as bytes, already
 self-contained. A project that has been imported is just a project, and nothing depends on this
 tool at render time.
 
 Plus the report, which is the thing that makes the output trustworthy.
+
+```
+dotnet run --project harness -- --all --package out
+```
+
+187 packages, 15.9 MB, 1,800 refusals recorded inside them. See [docs/PACKAGE.md](docs/PACKAGE.md).
+
+**Verified against the reader, not against the specification.** CupriCut's own CLI opens the
+packages, reads back the size, frame rate, duration and every asset, and lints them without a
+`CUT003`. It cannot render them yet, and that is not a packaging problem: CupriCut pins CupriFace
+**0.26.1**, five releases behind, so it rejects the documents for WOFF 2 fonts (0.28.1), `inset`
+(0.27.0) and the `border` shorthand `rgba()` crash (0.26.2) — the last being the same crash this
+repository wrote a rewrite rule for and deleted when it was fixed. **Upgrading CupriCut is what
+makes these render**, and it is the obvious next thing to do outside this repository.
+
+### What it had to decide
+
+- **A package runs the longer of the declared duration and the motion.** The open question from
+  Milestone 3, answered here because this is where it lands. The two failures are not symmetrical:
+  too long holds a last frame, too short cuts the composition off mid-move. The disagreement goes
+  in the report rather than being resolved silently.
+- **`data-start` and `data-duration` are removed.** They are how a *loose* block declares its own
+  length; a package has `render.duration`. Carrying both costs the element its one animation slot,
+  which CupriCut reports as `CUT003` — 13 of the 187 blocks were that error before this.
 
 ### Fonts travel as files, not as `data:` URIs
 

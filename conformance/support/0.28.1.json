@@ -2,7 +2,7 @@
   "engine": "0.28.1",
   "platform": "Win32NT",
   "runtime": "10.0.10",
-  "measured": "2026-09-22T14:37:59.3612743+00:00",
+  "measured": "2026-09-23T13:22:25.769685+00:00",
   "support": [
     {
       "property": "width",
@@ -338,6 +338,20 @@
       "value": "WOFF 2, registered face",
       "parses": true,
       "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translateX \u002B an unsupported skewX",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "skewX(20deg) alone",
+      "parses": true,
+      "paints": false,
       "diagnostics": []
     },
     {

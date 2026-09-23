@@ -316,6 +316,20 @@ public static class Cases
             new Doc(Text, ".p{font-family:'Inter';font-size:40px;color:#d9642a;}"),
             new Doc(Text, ".p{font-family:'NoSuchFaceExists';font-size:40px;color:#d9642a;}")),
 
+        // ---- one unsupported function in a transform LIST ---------------------------------------
+        // The compiler writes a transform as a fixed list of components, so a single element's
+        // animation can carry `translateX(40px) ... skewX(0deg)` in one declaration. skewX is
+        // reported unsupported on 9 corpus blocks. Whether that costs the skew or costs the WHOLE
+        // declaration is the difference between a cosmetic gap and every transform in those blocks
+        // silently not applying, and nothing here had ever asked.
+        //
+        // The control has no transform at all, so a "yes" means the supported components still
+        // moved the element and a "NO" means one unknown function threw the list away.
+        Added("transform", "translateX + an unsupported skewX", Box,
+            "transform:translateX(80px) skewX(20deg);"),
+
+        Added("transform", "skewX(20deg) alone", Box, "transform:skewX(20deg);"),
+
         // ---- the other half of the font question: how the bytes arrive -------------------------
         // An @font-face src the document carries itself. docs/CORPUS.md says a data: URI works and
         // proposes it as the rewrite for the 44 blocks that fetch a face over the network, which

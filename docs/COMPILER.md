@@ -121,13 +121,47 @@ JavaScript to run the callback.
 **Reach is not the score.** Frames decide the score, and a block whose every tween was read can
 still render wrongly. What it was worth, against the browser:
 
-| | before the compiler | with it, on 0.26.1 | on 0.27.0 | on 0.28.1 |
-|---|---|---|---|---|
-| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** | 185 of 187 |
-| mean of frame, over blocks whose reference moves | 55.2% | 62.8% | 62.7% | 62.7% |
-| **mean of content**, all scored blocks | — | — | 38.1% | **38.2%** |
-| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 | 147 of 185 |
-| blocks the engine paints almost nothing in | — | — | — | **93 of 185** |
+| | before the compiler | with it, on 0.26.1 | on 0.27.0 | on 0.28.1 | with start values |
+|---|---|---|---|---|---|
+| blocks scored | 150 of 187 | 183 of 187 | **185 of 187** | 185 of 187 | 185 of 187 |
+| mean of frame, over blocks whose reference moves | 55.2% | 62.8% | 62.7% | 62.7% | 63.8% |
+| **mean of content**, all scored blocks | — | — | 38.1% | 38.2% | **38.2%** |
+| blocks where the engine rendered one still frame | **150 of 150** | 145 of 183 | 147 of 185 | 147 of 185 | **140 of 185** |
+| blocks the engine paints almost nothing in | — | — | — | 93 of 185 | **84 of 185** |
+| the frame replaced rather than shifted | — | — | — | 12.8% | **11.0%** |
+
+### Start values, read out of the stylesheet
+
+A tween starts from wherever the element already is, and GSAP reads that out of the computed style
+before it animates. A compiler that never runs the document assumed `opacity: 1` and the identity
+transform, so `.to(el, { opacity: 1 })` on an element the stylesheet authors at `opacity: 0`
+produced a keyframe whose every stop said 1 — a fade in a browser and a still here. That was
+**112 animations across 45 blocks**, the largest correctable gap the refusal counts named.
+
+`compiler/Authored.cs` resolves the document's own cascade for the elements a selector matches:
+rules in specificity then source order, `@media` descended into, the `style` attribute last.
+**62 flat animations are left.**
+
+Two rules make it safe rather than clever:
+
+- **Declared values, never computed ones.** `ComputeStyle()` is the obvious call and it throws on
+  `translate(-50%, -50%)`, the commonest centring idiom in this corpus. It is also the wrong
+  question: what a tween starts from is what the author wrote, not a pixel matrix resolved against
+  a viewport the compiler does not have.
+- **Anything unresolvable answers nothing.** A selector matching no element, two elements whose
+  rules disagree, a `matrix()` or a `var()`, a start in a different unit from the tween — all keep
+  the old assumption and the old refusal. A wrong start value is an animation that runs from the
+  wrong place, which is worse than one that does not run: the second shows up in the report.
+
+Untouched transform components are carried into every stop for the same reason. Without it an
+element authored `translate(-50%, -50%) scale(0)` and tweened on `scale` alone emitted
+`transform: scale(1)`, which replaces the whole declaration and drops the centring — correct about
+the property it carried and wrong about where the element is.
+
+**It did not move the mean, and the reason is instructive.** 10 blocks better, 9 worse, 38.2%
+either way. The losers are almost all `transitions-*`, where an element wrongly held visible was
+covering the whole frame; hiding it correctly exposed other content that is wrongly visible for
+reasons this change does not address. Two wrongs were cancelling. Every other measure improved.
 
 38 blocks animate where none did. The engine upgrade added two more scorable blocks and left the
 frame-wide mean where it was, which is itself worth knowing: on the 183 blocks scored in both runs

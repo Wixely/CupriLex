@@ -167,10 +167,19 @@ size**, and **`<template>` inlined**. What is left:
 
 And the compiler's own unfinished business, which the refusal counts rank:
 
-- **reading an element's authored start value.** 112 compiled animations hold one value for their
-  whole length, because `.to(el, {opacity: 1})` on an element the stylesheet authors as
-  `opacity: 0` is a fade in a browser and a still here. This is the largest correctable gap, and it
-  needs the cascade resolved for one element without running the document.
+- ~~**reading an element's authored start value.**~~ **Done.** 112 compiled animations held one
+  value for their whole length, because `.to(el, {opacity: 1})` on an element the stylesheet
+  authors as `opacity: 0` is a fade in a browser and a still here. The declared value is now read
+  out of the document's own cascade - `compiler/Authored.cs` - and **62 are left**. Untouched
+  transform components are carried too, so an animation no longer replaces an authored
+  `translate(-50%, -50%)` with its own partial transform.
+
+  It did not move the corpus mean. 10 blocks better, 9 worse, 38.2% before and after. Everything
+  else moved: 7 more blocks animate, 9 more paint anything at all, and the severe share fell from
+  12.8% to 11.0%. The 9 losers are almost all `transitions-*`, and the reason is worth keeping:
+  an element wrongly held visible was covering the frame, and hiding it correctly exposed other
+  content that is wrongly visible for reasons this change does not touch. Two wrongs were
+  cancelling, and only one of them is fixed.
 - **a tween of a property the engine cannot animate**, the largest single refusal group. Nothing to
   rewrite in most cases, but `backgroundColor` could cross-fade two stacked elements.
 - **`.add()` of a nested timeline**, refused rather than flattened

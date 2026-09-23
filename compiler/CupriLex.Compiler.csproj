@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -23,6 +23,21 @@
     -->
     <PackageReference Include="Acornima" Version="1.8.0" />
     <PackageReference Include="AngleSharp" Version="1.7.0" />
+
+    <!--
+      The CSS side of the same parser, for ONE question: what does the stylesheet already say this
+      element's opacity and transform are? A tween to opacity 1 on an element the stylesheet
+      authors at 0 is a fade in a browser and a still here, and 112 animations across 45 blocks
+      were emitted flat for exactly that reason.
+
+      DECLARED values, never computed ones. ComputeStyle() is the obvious call and it throws a
+      NullReferenceException on `translate(-50%, -50%)`, the commonest centring idiom in this
+      corpus - and a computed pixel value is the wrong answer anyway, because what a tween starts
+      from is what the author wrote.
+
+      Prerelease because that is the only form this package has ever had. Pinned exactly.
+    -->
+    <PackageReference Include="AngleSharp.Css" Version="1.0.0-beta.154" />
   </ItemGroup>
 
 </Project>

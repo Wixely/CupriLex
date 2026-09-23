@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace CupriLex.Compiler;
@@ -47,10 +47,13 @@ public static class Emit
         _ => Properties.Identity(component),
     };
 
-    public static Sheet Sheet(IReadOnlyList<RawTween> tweens, IReadOnlyList<Refusal> carried)
+    public static Sheet Sheet(IReadOnlyList<RawTween> tweens, IReadOnlyList<Refusal> carried,
+        Authored? authored = null)
     {
         var refusals = carried.ToList();
-        var tracks = Thread(tweens, refusals);
+        authored ??= Authored.None;
+        var tracks = Thread(tweens, refusals, authored);
+        Carry(tracks, authored);
 
         if (tracks.Count == 0) return new Sheet("", 0, 0, refusals, [], 0);
 
@@ -127,7 +130,7 @@ public static class Emit
     /// overwrite the first silently.</para>
     /// </summary>
     private static Dictionary<string, Dictionary<string, List<Stop>>> Thread(
-        IReadOnlyList<RawTween> tweens, List<Refusal> refusals)
+        IReadOnlyList<RawTween> tweens, List<Refusal> refusals, Authored authored)
     {
         var tracks = new Dictionary<string, Dictionary<string, List<Stop>>>();
         var current = new Dictionary<(string Selector, string Component), Amount>();
@@ -147,15 +150,22 @@ public static class Emit
                 {
                     "from" => target,
                     "fromTo" when tween.From?.TryGetValue(gsapName, out var given) == true => given,
+                    // Nothing earlier in this timeline touched the property, so the element is
+                    // wherever its own stylesheet left it. Asking is the whole point: the
+                    // fallback below assumes opacity 1 and the identity transform, and an
+                    // element authored `opacity: 0` then produces a tween from 1 to 1.
                     _ => current.TryGetValue(key, out var held)
                         ? held
-                        : Resting(component) is { } rest
-                            ? new Amount(rest, target.Unit)
-                            : default,
+                        : Start(authored, tween.Selector, component, target) is { } stated
+                            ? stated
+                            : Resting(component) is { } rest
+                                ? new Amount(rest, target.Unit)
+                                : default,
                 };
 
                 if (tween.Verb != "fromTo" && tween.Verb != "from"
-                    && !current.ContainsKey(key) && Resting(component) is null)
+                    && !current.ContainsKey(key) && Resting(component) is null
+                    && Start(authored, tween.Selector, component, target) is null)
                 {
                     refusals.Add(new Refusal(
                         $"'{gsapName}' on '{tween.Selector}': a tween TO a size, from whatever the "
@@ -192,6 +202,57 @@ public static class Emit
         }
 
         return tracks;
+    }
+
+    /// <summary>
+    /// The value the stylesheet gives a component, if it gives one this tween can start from.
+    ///
+    /// <para>The unit check is the part that matters. An authored <c>translate(-50%, -50%)</c> and
+    /// a tween of <c>x</c> in pixels are two different quantities, and a keyframe holds one number
+    /// and one unit: starting a pixel tween at -50 because the stylesheet said -50% would move the
+    /// element to a place nothing asked for. Where they disagree this answers nothing, the
+    /// compiler keeps its old assumption, and the refusal it already writes still stands.</para>
+    /// </summary>
+    private static Amount? Start(Authored authored, string selector, string component, Amount target)
+    {
+        if (authored.Value(selector, component) is not { } stated) return null;
+
+        // A unitless number - every scale, and a bare 0 - is comparable to anything.
+        if (stated.Unit.Length > 0 && target.Unit.Length > 0 && stated.Unit != target.Unit)
+            return null;
+
+        return stated;
+    }
+
+    /// <summary>
+    /// Transform components the stylesheet states and no tween touches, carried into the
+    /// animation as constants.
+    ///
+    /// <para>Without this, an element authored <c>translate(-50%, -50%) scale(0)</c> and tweened
+    /// on <c>scale</c> alone is emitted as <c>transform: scale(1)</c> - which replaces the whole
+    /// declaration and drops the centring, moving the element by half its own size for the length
+    /// of the composition. The animation was right about the property it carried and wrong about
+    /// the element's position, which is the harder failure to see.</para>
+    ///
+    /// <para>Only where something is already animating. An element with no transform track keeps
+    /// its stylesheet declaration untouched, and nothing here should reach in and restate it.</para>
+    /// </summary>
+    private static void Carry(
+        Dictionary<string, Dictionary<string, List<Stop>>> tracks, Authored authored)
+    {
+        foreach (var (selector, properties) in tracks)
+        {
+            if (!properties.Keys.Any(Properties.IsTransform)) continue;
+            if (authored.Values(selector) is not { } stated) continue;
+
+            foreach (var (component, amount) in stated)
+            {
+                if (!Properties.IsTransform(component)) continue;
+                if (properties.ContainsKey(component)) continue;
+
+                properties[component] = [new Stop(0, amount.Number, amount.Unit)];
+            }
+        }
     }
 
     /// <summary>Whether a property's stops hold more than one value. A tolerance rather than an

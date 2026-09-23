@@ -1,4 +1,4 @@
-using CupriLex.Compiler;
+﻿using CupriLex.Compiler;
 using Xunit;
 
 namespace CupriLex.Harness.Tests;
@@ -103,7 +103,9 @@ public class TranslationTests : IDisposable
         var translated = Translator.Of("""
             <html><body><div class="a"></div><script>
               const tl = gsap.timeline();
-              for (let i = 0; i < 3; i++) { tl.to(".a", { x: i * 10, duration: 1 }); }
+              // A bound the compiler cannot resolve, so the body is never read. A counted loop
+              // would be written out now, and this test is about what happens when it cannot be.
+              for (let i = 0; i < window.howMany; i++) { tl.to(".a", { x: i * 10, duration: 1 }); }
             </script></body></html>
             """);
 

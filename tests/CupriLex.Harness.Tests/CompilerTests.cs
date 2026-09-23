@@ -1,4 +1,4 @@
-using CupriLex.Compiler;
+﻿using CupriLex.Compiler;
 using Xunit;
 
 namespace CupriLex.Harness.Tests;
@@ -252,18 +252,93 @@ public class CompilerTests
         Assert.Contains(refusals, r => r.What.Contains("backgroundColor", StringComparison.Ordinal));
     }
 
-    /// <summary>The case the plan said to find early: a timeline built in a loop. It is refused,
-    /// and counted, rather than half-carried.</summary>
+    /// <summary>
+    /// A timeline built in a loop over data the document states, which is now written out.
+    ///
+    /// <para>This test used to assert the opposite - empty CSS and a refusal naming the loop - and
+    /// it was right to, for as long as the compiler did not read loops. 1,110 of the corpus's GSAP
+    /// calls sit inside one and 622 of them iterate something the source states outright.</para>
+    /// </summary>
     [Fact]
-    public void Tweens_built_in_a_loop_are_refused_and_counted()
+    public void Tweens_built_in_a_loop_over_stated_data_are_carried()
     {
         var compiled = Compile("""
             const tl = gsap.timeline();
             [1, 2, 3].forEach(function (n) { tl.to(".a", { x: n * 10, duration: 1 }); });
             """);
 
+        Assert.NotEmpty(compiled.Motion.Css);
+        Assert.Contains("translateX(30px)", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("inside a loop", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_loop_whose_extent_is_not_knowable_is_still_refused_and_counted()
+    {
+        // The half that must not change. An extent the compiler cannot resolve leaves the body
+        // unread, and the refusal says so rather than carrying some of the motion.
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            for (let i = 0; i < document.querySelectorAll(".x").length; i++) {
+              tl.to(".a", { x: i * 10, duration: 1 });
+            }
+            """);
+
         Assert.Empty(compiled.Motion.Css);
-        Assert.Contains(compiled.Refusals, r => r.What.Contains("loop", StringComparison.Ordinal));
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("inside a loop", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_counted_loop_is_written_out_in_order()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            for (let i = 0; i < 3; i++) { tl.to(".a", { x: i * 10, duration: 1 }); }
+            """);
+
+        // Three tweens appended one after another: the last ends at 20px, three seconds in.
+        Assert.Contains("translateX(20px)", css);
+        Assert.Contains("animation:", css);
+    }
+
+    [Fact]
+    public void A_for_of_over_a_stated_list_is_written_out()
+    {
+        var css = Css("""
+            const STEPS = [5, 15];
+            const tl = gsap.timeline();
+            for (const s of STEPS) { tl.to(".a", { x: s, duration: 1 }); }
+            """);
+
+        Assert.Contains("translateX(15px)", css);
+    }
+
+    [Fact]
+    public void A_forEach_binds_the_index_and_the_array_as_well_as_the_item()
+    {
+        // `ROWS.forEach((row, i) => tl.to("#row-" + i, ...))` is the commonest shape in the
+        // corpus, and the selector only resolves if the index is bound.
+        var css = Css("""
+            const ROWS = ["a", "b"];
+            const tl = gsap.timeline();
+            ROWS.forEach(function (row, i) { tl.to("#r" + i, { x: 10, duration: 1 }); });
+            """,
+            """<div id="r0"></div><div id="r1"></div>""");
+
+        Assert.Contains("#r0 {", css);
+        Assert.Contains("#r1 {", css);
+    }
+
+    [Fact]
+    public void A_loop_longer_than_the_compiler_will_write_out_is_refused_rather_than_truncated()
+    {
+        // Half a loop is motion that stops for no reason, which is worse than none.
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            for (let i = 0; i < 5000; i++) { tl.to(".a", { x: i, duration: 0.01 }); }
+            """);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("more than", StringComparison.Ordinal));
     }
 
     /// <summary>Two tweens of the same property overlapping cannot both be expressed in one

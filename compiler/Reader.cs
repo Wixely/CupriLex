@@ -1,4 +1,4 @@
-using Acornima.Ast;
+﻿using Acornima.Ast;
 
 namespace CupriLex.Compiler;
 
@@ -99,11 +99,190 @@ public sealed class Reader
                 Statements(block.Body, new Scope(scope));
                 break;
 
+            // A loop whose extent is written in the document is straight-line code with the
+            // repetition spelled out, and it is read as exactly that. One whose extent is not
+            // knowable falls through to Unreached() as before.
+            case ForStatement loop:
+                Unroll(loop, scope);
+                break;
+
+            case ForOfStatement each:
+                UnrollOf(each, scope);
+                break;
+
             default:
                 // Not followed. Whatever motion is inside gets named by Unreached().
                 break;
         }
     }
+
+    // ---- loops --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// How many iterations this compiler will write out for one loop.
+    ///
+    /// <para>The corpus's largest resolvable loop runs 62 times; 256 leaves room without letting a
+    /// mistake in the bound arithmetic emit a hundred thousand keyframes. Exceeding it is reported
+    /// rather than truncated, because half a loop is motion that stops for no reason.</para>
+    /// </summary>
+    private const int MostIterations = 256;
+
+    /// <summary>
+    /// <c>for (let i = 0; i &lt; 6; i++)</c>, written out.
+    ///
+    /// <para>1,110 of the corpus's GSAP calls sit inside a loop and 622 of them iterate something
+    /// the document states: a literal array, or a bound that is a number. Refusing those was the
+    /// largest gap left in the compiler, and it was never a limit of static analysis - the count
+    /// is written in the source.</para>
+    ///
+    /// <para>This is still static analysis and not execution. The start, the bound and the step
+    /// are each resolved by the same evaluator that resolves a duration, and anything it cannot
+    /// resolve leaves the loop unread exactly as before. Nothing runs; the repetition is unfolded
+    /// and the ordinary walker then reads what is inside.</para>
+    /// </summary>
+    private void Unroll(ForStatement loop, Scope scope)
+    {
+        if (loop.Init is not VariableDeclaration { Declarations.Count: 1 } declaration
+            || declaration.Declarations[0] is not { Id: Identifier counter } start
+            || Evaluator.Of(start.Init, scope).AsNumber is not { } from)
+            return;
+
+        if (loop.Test is not NonLogicalBinaryExpression test
+            || test.Left is not Identifier tested || tested.Name != counter.Name
+            || Evaluator.Of(test.Right, scope).AsNumber is not { } bound)
+            return;
+
+        if (Stride(loop.Update, counter.Name, scope) is not { } stride || stride == 0) return;
+
+        var inner = new Scope(scope);
+        var iterations = 0;
+
+        for (var value = from; Continues(test.Operator, value, bound); value += stride)
+        {
+            if (++iterations > MostIterations)
+            {
+                _refusals.Add(new Refusal(
+                    "a loop that runs more than " + MostIterations + " times, which this compiler "
+                    + "will not write out - the motion inside it is not carried", Line(loop)));
+                return;
+            }
+
+            inner.Bind(counter.Name, new Value.Number(value));
+            Statement(loop.Body, inner);
+        }
+    }
+
+    /// <summary><c>for (const row of ROWS)</c> over a list the document states.</summary>
+    private void UnrollOf(ForOfStatement each, Scope scope)
+    {
+        if (Evaluator.Of(each.Right, scope) is not Value.List list) return;
+        if (Bound(each.Left) is not { } name) return;
+
+        if (list.Of.Count > MostIterations)
+        {
+            _refusals.Add(new Refusal(
+                "a for-of over " + list.Of.Count + " items, more than the " + MostIterations
+                + " this compiler will write out - the motion inside it is not carried", Line(each)));
+            return;
+        }
+
+        var inner = new Scope(scope);
+
+        foreach (var item in list.Of)
+        {
+            inner.Bind(name, item);
+            Statement(each.Body, inner);
+        }
+    }
+
+    /// <summary>
+    /// <c>ROWS.forEach((row, i) =&gt; ...)</c>, the commonest of all of them: 421 of the corpus's
+    /// loop-bodied GSAP calls are written this way.
+    ///
+    /// <para>The callback is inlined once per element with its parameters bound, which is what
+    /// <see cref="Step"/> already does for a function called by name. The third parameter - the
+    /// array itself - is bound too, because a body that indexes back into it is ordinary.</para>
+    /// </summary>
+    private bool Each(CallExpression call, Scope scope)
+    {
+        if (call.Callee is not MemberExpression { Property: Identifier { Name: "forEach" } } member)
+            return false;
+
+        if (call.Arguments.Count == 0 || Routine(call.Arguments[0]) is not Value.Routine body)
+            return false;
+
+        if (Evaluator.Of(member.Object, scope) is not Value.List list) return false;
+
+        if (list.Of.Count > MostIterations)
+        {
+            _refusals.Add(new Refusal(
+                "a forEach over " + list.Of.Count + " items, more than the " + MostIterations
+                + " this compiler will write out - the motion inside it is not carried", Line(call)));
+            return true;
+        }
+
+        _handled.Add(call);
+
+        for (var index = 0; index < list.Of.Count; index++)
+        {
+            var inner = new Scope(scope);
+
+            if (body.Parameters.Count > 0 && body.Parameters[0] is Identifier item)
+                inner.Bind(item.Name, list.Of[index]);
+
+            if (body.Parameters.Count > 1 && body.Parameters[1] is Identifier at)
+                inner.Bind(at.Name, new Value.Number(index));
+
+            if (body.Parameters.Count > 2 && body.Parameters[2] is Identifier whole)
+                inner.Bind(whole.Name, list);
+
+            switch (body.Body)
+            {
+                case FunctionBody statements: Statements(statements.Body, inner); break;
+                case Expression only: Effect(only, inner); break;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>The name a <c>for-of</c> binds, whether it declares one or assigns to one.</summary>
+    private static string? Bound(Node left) => left switch
+    {
+        VariableDeclaration { Declarations.Count: 1 } d
+            when d.Declarations[0].Id is Identifier id => id.Name,
+        Identifier id => id.Name,
+        _ => null,
+    };
+
+    /// <summary>How far one iteration moves the counter, or null if that is not knowable.</summary>
+    private static double? Stride(Node? update, string counter, Scope scope) => update switch
+    {
+        UpdateExpression { Argument: Identifier a } u when a.Name == counter =>
+            u.Operator == Acornima.Operator.Increment ? 1 : -1,
+
+        AssignmentExpression { Left: Identifier b } assign when b.Name == counter =>
+            Evaluator.Of(assign.Right, scope).AsNumber is { } by
+                ? assign.Operator switch
+                {
+                    Acornima.Operator.AdditionAssignment => by,
+                    Acornima.Operator.SubtractionAssignment => -by,
+                    _ => (double?)null,
+                }
+                : null,
+
+        _ => null,
+    };
+
+    private static bool Continues(Acornima.Operator comparison, double value, double bound) =>
+        comparison switch
+        {
+            Acornima.Operator.LessThan => value < bound,
+            Acornima.Operator.LessThanOrEqual => value <= bound,
+            Acornima.Operator.GreaterThan => value > bound,
+            Acornima.Operator.GreaterThanOrEqual => value >= bound,
+            _ => false,
+        };
 
     private void Declare(VariableDeclarator declarator, Scope scope)
     {
@@ -140,6 +319,11 @@ public sealed class Reader
             case CallExpression { Callee: Identifier called } invoked
                 when scope.Lookup(called.Name) is Value.Routine routine:
                 Step(routine, invoked, scope);
+                break;
+
+            // Before the general call, because a forEach IS a call and the general path would
+            // read it as a timeline verb it does not know and leave the body unvisited.
+            case CallExpression each when Each(each, scope):
                 break;
 
             case CallExpression call:

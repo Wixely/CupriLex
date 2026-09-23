@@ -83,7 +83,7 @@ On CupriFace 0.28.1, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
 | | |
 |---|---|
 | blocks scored | **185 of 187** |
-| **mean of content** | **38.2%** — the number to beat |
+| **mean of content** | **38.3%** — the number to beat |
 | median | 40.0% |
 | mean of frame | 67.0% |
 | where it is wrong, off by | 33.0% of full scale |

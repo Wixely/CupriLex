@@ -182,7 +182,9 @@ And the compiler's own unfinished business, which the refusal counts rank:
   cancelling, and only one of them is fixed.
 - **a tween of a property the engine cannot animate**, the largest single refusal group. Nothing to
   rewrite in most cases, but `backgroundColor` could cross-fade two stacked elements.
-- **`.add()` of a nested timeline**, refused rather than flattened
+- **`.add()` of a nested timeline**, refused rather than flattened. **Now the second largest
+  refusal group at 125**, up from 41: unrolling the loops reached a great many `.add()` calls that
+  were never visited before
 - **`repeat` and `stagger`**, both of which need more than one animation per element
 - **how dense the ease sampling should be.** Eight stops was a guess and is still a guess; the
   comparison harness is what should answer it.
@@ -281,10 +283,23 @@ time. That is a decision about honesty rather than about fonts.
 - ~~**External fonts.**~~ **Closed**: the package carries the bytes and the host registers them.
   See Milestone 5. Both halves were measured first - `.woff2` decodes as of 0.28.1, and a `data:`
   URI works too and was rejected anyway for being the larger, more invasive way to do it.
-- **Blocks that build timelines from data.** Answered as far as measurement can: a loop is refused
-  and counted, and the loop-shaped refusals are now among the largest groups. The question left is
-  whether to unroll a loop over a *literal* array, which is statically resolvable, and how much of
-  the corpus that would actually reach.
+- ~~**Blocks that build timelines from data.**~~ **Closed, and the answer is "it reaches a lot and
+  is worth almost nothing".** A loop whose extent the document states is now written out: a
+  `forEach` over a stated array, a `for` with a literal bound or one over such an array's length,
+  and `for-of`. That is **622 of the corpus's 1,110 loop-bodied GSAP calls**, and unrolling them
+  put **70 more elements** under animation, 883 to 953.
+
+  The corpus moved 38.20% to 38.28%, and three blocks account for nearly all of it. The reason is
+  in the refusals it uncovered: animations matching no element went from 28 to 71, `.add()` of a
+  nested timeline from 41 to 125, and 126 refusals appeared naming targets like `cards[i]` and
+  `spinner` - DOM references held in variables rather than selector strings. The loops were never
+  the obstacle. What is inside them addresses elements the document does not contain, because the
+  JavaScript that would have built them is the JavaScript that was removed.
+
+  Kept anyway, and not only because it is correct. The refusals are now specific: "targets
+  `cards[i]`, which could not be reduced to a CSS selector" instead of "N calls inside a loop",
+  which is the difference between a report that names the obstacle and one that names the shape of
+  the code around it.
 - **Whether the engine's bugs are ours to work around.** Three rewrites now exist only because
   CupriFace 0.26.1 crashes or ignores something. They are measured, named, and pinned by tests that
   fail when the engine is fixed — but every one of them is output that differs from what the author

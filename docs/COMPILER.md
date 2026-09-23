@@ -130,6 +130,32 @@ still render wrongly. What it was worth, against the browser:
 | blocks the engine paints almost nothing in | — | — | — | 93 of 185 | **84 of 185** |
 | the frame replaced rather than shifted | — | — | — | 12.8% | **11.0%** |
 
+### Loops over data the document states
+
+`for (let i = 0; i < 6; i++)`, `for (const row of ROWS)` and `ROWS.forEach((row, i) => ...)` are
+written out, once per iteration, with the counter or the item and its index bound. It is still
+static analysis: the start, the bound and the step are resolved by the same evaluator that resolves
+a duration, and a loop whose extent cannot be resolved is left unread and refused exactly as before.
+Nothing is executed. A loop longer than 256 iterations is refused rather than truncated, because
+half a loop is motion that stops for no reason.
+
+**622 of the corpus's 1,110 loop-bodied GSAP calls** iterate something the source states outright.
+Reading them put 70 more elements under animation, 883 to 953.
+
+**The corpus moved 0.08 of a point.** Three blocks improved, one lost 0.4, and the rest did not
+notice. What the change actually produced was a better report, because the calls it reached then
+refused for reasons of their own:
+
+| refusal | before | after |
+|---|---|---|
+| an animation matching no element in the document | 28 | 71 |
+| `.add()` of a nested timeline, not flattened | 41 | 125 |
+| a target like `cards[i]` or `spinner`, not a selector | — | 126 |
+
+The loops were never the obstacle. What is inside them addresses elements the document does not
+contain, because the JavaScript that would have built them is the JavaScript that was removed. This
+is the fifth measurement to land on that sentence.
+
 ### Start values, read out of the stylesheet
 
 A tween starts from wherever the element already is, and GSAP reads that out of the computed style

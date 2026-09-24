@@ -18,7 +18,7 @@ namespace CupriLex.Compiler;
 public static class Reporting
 {
     public static string Of(Composition composition, Collected assets, double seconds,
-        IReadOnlyList<string> freed)
+        IReadOnlyList<string> freed, Dropped dropped)
     {
         var report = new StringBuilder();
         var culture = CultureInfo.InvariantCulture;
@@ -92,6 +92,26 @@ public static class Reporting
                               + "slot the engine gives it.");
             report.AppendLine();
             foreach (var one in freed) report.AppendLine($"- `{one}`");
+            report.AppendLine();
+        }
+
+        if (dropped.Families.Count > 0)
+        {
+            report.AppendLine("## Font families removed from the stacks");
+            report.AppendLine();
+            report.AppendLine("A strict font policy refuses a stack that names a face it has not "
+                              + "got, **even when a good fallback follows it** - measured, "
+                              + "`\"NoSuchFamily\", \"Noto Sans\", sans-serif` fails with Noto "
+                              + "Sans registered. These names are answered by nothing in this "
+                              + "package, so they were removed from "
+                              + dropped.Declarations + " stack(s). A browser used whichever of "
+                              + "them the machine happened to have; writing that choice down is "
+                              + "what makes the render reproducible.");
+            report.AppendLine();
+
+            foreach (var (family, count) in dropped.Families.OrderByDescending(f => f.Value))
+                report.AppendLine($"- `{family}` — named in {count} declaration(s)");
+
             report.AppendLine();
         }
 

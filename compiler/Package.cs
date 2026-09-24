@@ -74,6 +74,10 @@ public static class Package
         var collected = Assets.Collect(document, directory);
         var freed = FreeTheWindowSlot(document, composition.Motion.Selectors);
 
+        // After the assets, because what the package CARRIES is what a stack may name, and the
+        // @font-face rules have just had their urls rewritten under them.
+        var dropped = Fallbacks.Trim(document, Fallbacks.Carried(document));
+
         // Never shorter than the author said, never shorter than the motion. A third of this
         // corpus declares a duration its own timeline does not span, and the two failures are not
         // symmetrical: a package that runs long shows a held last frame, and one that runs short
@@ -98,7 +102,7 @@ public static class Package
             Meta = new Meta
             {
                 Engine = "CupriLex",
-                Notes = Notes(composition, collected, seconds, freed),
+                Notes = Notes(composition, collected, seconds, freed, dropped),
             },
         };
 
@@ -113,7 +117,7 @@ public static class Package
         using (var zip = new ZipArchive(file, ZipArchiveMode.Create))
         {
             Text(zip, Manifest, JsonSerializer.Serialize(project, Json));
-            Text(zip, Report, Reporting.Of(composition, collected, seconds, freed));
+            Text(zip, Report, Reporting.Of(composition, collected, seconds, freed, dropped));
 
             foreach (var asset in collected.Entries)
             {
@@ -188,7 +192,8 @@ public static class Package
     }
 
     private static List<string> Notes(
-        Composition composition, Collected collected, double seconds, IReadOnlyList<string> freed)
+        Composition composition, Collected collected, double seconds, IReadOnlyList<string> freed,
+        Dropped dropped)
     {
         var notes = new List<string>
         {
@@ -215,6 +220,15 @@ public static class Package
                       + "loose HTML block has nowhere but an attribute to declare its length; this "
                       + "package has render.duration, and carrying both costs the element its one "
                       + "animation slot.");
+
+        if (dropped.Families.Count > 0)
+            notes.Add($"{dropped.Families.Count} font family/families were removed from "
+                      + $"{dropped.Declarations} font stack(s) - "
+                      + string.Join(", ", dropped.Families.Keys.Take(6))
+                      + (dropped.Families.Count > 6 ? ", …" : "")
+                      + ". Nothing in this package can answer them, and a strict font policy "
+                      + "refuses a stack that names a face it has not got, however good the "
+                      + "fallback after it.");
 
         return notes;
     }

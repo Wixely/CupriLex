@@ -1,4 +1,4 @@
-# The output: a translated block as a `.cutpkg`
+﻿# The output: a translated block as a `.cutpkg`
 
 ```
 dotnet run --project harness -- <block> --package out
@@ -55,6 +55,25 @@ which it reports as `CUT003`. 13 of the 187 corpus blocks were that error before
 lost by removing them, because a browser composition puts its motion in a timeline and has never
 heard of CupriCut's windows.
 
+**Font stacks are trimmed to the faces the package can answer.** This one is not tidiness. A strict
+font policy refuses a family it has no face for, and measured on CupriFace 0.28.1 it does so *even
+when a registered family follows it in the stack*:
+
+| declaration | with Noto Sans registered |
+|---|---|
+| `"NoSuchFamily", "Noto Sans", sans-serif` | **refused** |
+| `sans-serif` | renders |
+| `serif` | renders |
+| `monospace`, `cursive` | **refused** — nothing registered answers them |
+
+So a stack is answered by its *names*, not by its order, and one unknown name anywhere in it stops
+the render. Corpus stacks name `Segoe UI`, `SF Mono`, `Menlo`, `Arial` — faces that belong to an
+operating system and will never be in a package, which the browser only ever used because it was
+running on a machine that had them. They are removed, and every name removed is in the report. A
+stack that loses everything gets `sans-serif`, because the browser fell back to the platform
+default there and a generic is the only way to write that down without naming a typeface nobody
+chose.
+
 A reference that names no file on disk is **reported and left exactly as written**. A broken link
 that is named can be fixed; one that has been quietly removed cannot.
 
@@ -91,12 +110,23 @@ cupricut inspect claude-exchange.cutpkg
 The size, the frame rate, the duration and every asset come back. `cupricut lint` reports no
 `CUT003`.
 
-**It does not render there yet, and that is not a packaging problem.** CupriCut pins CupriFace
-**0.26.1**, five releases behind, so it rejects these documents for three things the engine has
-since fixed: WOFF 2 fonts need the decoder that shipped in 0.28.1, `inset` is ignored until 0.27.0,
-and a `border` shorthand with an `rgba()` colour crashes the CSS parser until 0.26.2 — the same
-crash this repository wrote a rewrite rule for and deleted when it landed. Upgrading CupriCut is
-what makes these packages render.
+**Measured against it, package by package.** CupriCut was upgraded to 0.28.1 and every package
+linted:
+
+| | before trimming | after |
+|---|---|---|
+| cannot be built at all | 105 | **63** |
+| builds, lints as an error | 29 | 61 |
+| builds and lints clean | 53 | **63** |
+
+The 42 packages that moved were all the same failure: a stack naming a face nothing could answer.
+
+**What is left, and none of it is the packaging.** 54 still fail on a font, and 51 of those are one
+cause — their stacks trim down to `monospace`, and CupriCut registers only Noto Sans, so nothing
+answers the generic. Shipping one monospace face there fixes 51 packages without a line changing
+here. Carrying a real monospace face in the package fixes them properly, and that is the fetch work
+still outstanding. The other 9 are the WOFF 2 decoder rejecting a Caveat font that every browser
+reads, which is an unfiled CupriFace defect.
 
 ---
 

@@ -1,6 +1,8 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
-namespace CupriLex.Compiler;
+using CupriLex.Compiler;
+
+namespace CupriLex.Cli;
 
 /// <summary>
 /// How much of the corpus the compiler carries, and what it refuses.

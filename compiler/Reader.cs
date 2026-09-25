@@ -5,11 +5,11 @@ namespace CupriLex.Compiler;
 /// <summary>A number with the unit it was written in. <c>x: 100</c> is 100 pixels and
 /// <c>xPercent: 100</c> is 100 percent, and the difference has to survive as far as the
 /// stylesheet.</summary>
-public readonly record struct Amount(double Number, string Unit);
+internal readonly record struct Amount(double Number, string Unit);
 
 /// <summary>One tween as read, before its starting values are known. A <c>to</c> begins from
 /// wherever the element already is, which is not knowable until every tween is in time order.</summary>
-public sealed record RawTween(
+internal sealed record RawTween(
     string Selector,
     string Verb,
     double Start,
@@ -20,7 +20,7 @@ public sealed record RawTween(
     int Line);
 
 /// <summary>A timeline being built: where the next tween lands, and what the labels mean.</summary>
-public sealed class Clock
+internal sealed class Clock
 {
     public double Offset { get; init; }                 // where this timeline sits on the composition
     public double Cursor { get; set; }                  // end of the last tween: where an un-positioned one goes
@@ -37,7 +37,7 @@ public sealed class Clock
 /// Anything else is stepped over, and any motion call it contained is refused BY NAME rather than
 /// quietly lost - a tween that vanishes is exactly the failure this tool exists to prevent.</para>
 /// </summary>
-public sealed class Reader
+internal sealed class Reader
 {
     private static readonly HashSet<string> MotionVerbs = ["to", "set", "fromTo", "from"];
 

@@ -1,4 +1,4 @@
-using Acornima;
+﻿using Acornima;
 using Acornima.Ast;
 using AngleSharp.Html.Parser;
 
@@ -13,13 +13,13 @@ namespace CupriLex.Compiler;
 /// <param name="Line">The line the script opened on, for the same reason.</param>
 /// <param name="Source">The JavaScript, as written.</param>
 /// <param name="Tree">Its syntax tree.</param>
-public sealed record Parsed(int Index, int Line, string Source, AstProgram Tree);
+internal sealed record Parsed(int Index, int Line, string Source, AstProgram Tree);
 
 /// <summary>A script that could not be parsed at all.</summary>
-public sealed record Unparsed(int Index, int Line, string Why);
+internal sealed record Unparsed(int Index, int Line, string Why);
 
 /// <summary>The scripts of a document, and the ones that would not parse.</summary>
-public sealed record Scripts(IReadOnlyList<Parsed> Parsed, IReadOnlyList<Unparsed> Failed);
+internal sealed record Scripts(IReadOnlyList<Parsed> Parsed, IReadOnlyList<Unparsed> Failed);
 
 /// <summary>
 /// Getting from a block's HTML to syntax trees.
@@ -29,7 +29,7 @@ public sealed record Scripts(IReadOnlyList<Parsed> Parsed, IReadOnlyList<Unparse
 /// and a regular expression stops there. It is also the parser CupriFace itself uses, so both
 /// sides of a comparison read the same document the same way.</para>
 /// </summary>
-public static class ScriptReader
+internal static class ScriptReader
 {
     // Source references are off by default, and without them every refusal in the first run
     // reported a line number counted from the start of its own script rather than from the start

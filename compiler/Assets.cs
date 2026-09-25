@@ -24,7 +24,7 @@ public sealed record Collected(IReadOnlyList<Asset> Entries, IReadOnlyList<strin
 /// a CDN, an <c>&lt;img&gt;</c> whose file was never vendored. They are collected by name and
 /// reported.</para>
 /// </summary>
-public static class Assets
+internal static class Assets
 {
     private static readonly Regex CssUrl = new(
         @"url\((?<quote>['""]?)(?<url>[^)'""]+)\k<quote>\)",

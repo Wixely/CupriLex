@@ -86,9 +86,9 @@ a corpus with no CSS animation in it should do before the compiler exists.
 `compiler/`, and [docs/COMPILER.md](docs/COMPILER.md).
 
 ```
-dotnet run --project compiler -- shapes             # what the corpus writes
-dotnet run --project compiler -- reach              # how much of it is carried
-dotnet run --project compiler -- translate <block>  # one block, with its CSS
+dotnet run --project cli -- shapes             # what the corpus writes
+dotnet run --project cli -- reach              # how much of it is carried
+dotnet run --project cli -- translate <block>  # one block, with its CSS
 ```
 
 Timelines are read out of a syntax tree — Acornima parses, nothing executes — resolved to absolute

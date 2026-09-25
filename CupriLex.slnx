@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/cli/">
+    <Project Path="cli/CupriLex.Cli.csproj" />
+  </Folder>
+  <Folder Name="/compiler/">
+    <Project Path="compiler/CupriLex.Compiler.csproj" />
+  </Folder>
+  <Folder Name="/conformance/">
+    <Project Path="conformance/CupriLex.Conformance.csproj" />
+  </Folder>
+  <Folder Name="/harness/">
+    <Project Path="harness/CupriLex.Harness.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CupriLex.Harness.Tests/CupriLex.Harness.Tests.csproj" />
+  </Folder>
+</Solution>

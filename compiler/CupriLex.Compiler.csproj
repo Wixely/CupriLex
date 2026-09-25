@@ -1,14 +1,57 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>CupriLex.Compiler</RootNamespace>
     <AssemblyName>CupriLex.Compiler</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      A library, and the only thing in this repository that is published. The surveys that walk
+      the corpus live in cli/ so that a consumer gets the translation and nothing else: an alpha
+      that shipped Reader and Emit as public types would have somebody compiling against them by
+      accident, and after that they could not move.
+    -->
+    <IsPackable>true</IsPackable>
+    <PackageId>CupriLex.Compiler</PackageId>
+    <Version>0.1.0-alpha.1</Version>
+    <Authors>Wixely</Authors>
+    <Description>Browser HTML in, CupriFace-safe HTML out, and a report of everything that could not come with it. Compiles GSAP timelines to static CSS keyframes, packages a composition as a .cutpkg, and lists every request a document would make off the machine before making any of them.</Description>
+    <PackageTags>cupriface;cupricut;gsap;html;css;animation</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Wixely/CupriLex</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Wixely/CupriLex</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      The XML comments here ARE the documentation, and both of these warnings would make them
+      worse. CS1591 demands one on every public member of a package whose whole point is that most
+      of it is not public. CS1573 demands one per PARAMETER as soon as any parameter is documented,
+      which turns a summary that explains the one field worth explaining into a wall of restated
+      names. A filler line is not documentation.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+
+    <!-- The compilation internals are internal. The tests are the one thing that reads them, and
+         they are asserting how a translation is produced rather than how it is consumed. -->
+    <InternalsVisibleTo Include="CupriLex.Harness.Tests" />
+
+    <!--
+      The survey tool, which is this repository's own and not a consumer. `shapes` and `reach`
+      report on how the compiler reads a corpus - which call sites it reaches, what the corpus
+      writes - and that is a question about the internals by definition. Answering it through a
+      public API would mean publishing one for it.
+    -->
+    <InternalsVisibleTo Include="cuprilex" />
+  </ItemGroup>
 
   <ItemGroup>
     <!--

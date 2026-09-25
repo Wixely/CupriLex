@@ -8,14 +8,14 @@ namespace CupriLex.Compiler;
 
 /// <summary>A typeface a document uses. <paramref name="Weights"/> is every weight it asks that
 /// family for, so a fetcher knows which files are worth carrying.</summary>
-public sealed record Face(string Family, IReadOnlyList<int> Weights);
+internal sealed record Face(string Family, IReadOnlyList<int> Weights);
 
 /// <summary>What a document asks for and what it brings.</summary>
 /// <param name="Missing">Families used with no <c>@font-face</c> to answer them. Under a renderer
 /// with a strict font policy these are not a downgrade, they are a refusal: 96 of the corpus's 187
 /// packages cannot be built for exactly this.</param>
 /// <param name="Provided">Families the document declares a face for. Nothing to do.</param>
-public sealed record Typefaces(IReadOnlyList<Face> Missing, IReadOnlyList<string> Provided);
+internal sealed record Typefaces(IReadOnlyList<Face> Missing, IReadOnlyList<string> Provided);
 
 /// <summary>
 /// The typefaces a document names but does not carry.
@@ -32,7 +32,7 @@ public sealed record Typefaces(IReadOnlyList<Face> Missing, IReadOnlyList<string
 /// instructions to pick something, not names of anything, and a fetcher asked to find "monospace"
 /// would be inventing an answer.</para>
 /// </summary>
-public static class Faces
+internal static class Faces
 {
     /// <summary>CSS generic families, plus the two system keywords that behave like them. Named
     /// rather than pattern-matched: this list is short, fixed by the specification, and a wrong

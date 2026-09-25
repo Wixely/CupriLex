@@ -15,7 +15,7 @@ namespace CupriLex.Compiler;
 /// what was carried, not with what was refused: a report that lists only problems cannot be read
 /// as evidence that anything worked.</para>
 /// </summary>
-public static class Reporting
+internal static class Reporting
 {
     public static string Of(Composition composition, Collected assets, double seconds,
         IReadOnlyList<string> freed, Dropped dropped)

@@ -1,7 +1,8 @@
-# The corpus is somebody else's work, fetched on demand. See tools/fetch-corpus.py.
+﻿# The corpus is somebody else's work, fetched on demand. See tools/fetch-corpus.py.
 corpus/
 
 # Build output
+dist/
 bin/
 obj/
 *.user

@@ -4,7 +4,7 @@ using System.Text;
 namespace CupriLex.Compiler;
 
 /// <summary>A property's value at an instant, after easing has been sampled out of it.</summary>
-public readonly record struct Stop(double Time, double Number, string Unit);
+internal readonly record struct Stop(double Time, double Number, string Unit);
 
 /// <summary>The stylesheet a block's motion becomes, and everything that did not come with it.</summary>
 /// <param name="Css">Ready to drop into a <c>&lt;style&gt;</c>.</param>
@@ -29,7 +29,7 @@ public sealed record Sheet(
 /// rule, which means resolving every tween to absolute stops first and writing the element's whole
 /// state at each of them.</para>
 /// </summary>
-public static class Emit
+internal static class Emit
 {
     /// <summary>A gap small enough to read as instant and large enough to survive being rounded
     /// into a percentage. A <c>set</c> is a step, and a step in <c>@keyframes</c> is two stops a

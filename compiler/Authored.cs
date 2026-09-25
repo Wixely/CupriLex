@@ -26,7 +26,7 @@ namespace CupriLex.Compiler;
 /// start value is an animation that runs from the wrong place, which is worse than one that does
 /// not run: the second is visible in the report and the first is not.</para>
 /// </summary>
-public sealed class Authored
+internal sealed class Authored
 {
     private readonly IDocument _document;
     private readonly IReadOnlyList<ICssStyleRule> _rules;

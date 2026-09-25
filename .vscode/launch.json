@@ -141,8 +141,8 @@
       "name": "compiler: translate one block",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build compiler",
-      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "preLaunchTask": "build cli",
+      "program": "${workspaceFolder}/cli/bin/Debug/net10.0/cuprilex.dll",
       "args": [
         "translate",
         "${input:block}"
@@ -154,8 +154,8 @@
       "name": "compiler: reach across the corpus",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build compiler",
-      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "preLaunchTask": "build cli",
+      "program": "${workspaceFolder}/cli/bin/Debug/net10.0/cuprilex.dll",
       "args": [
         "reach"
       ],
@@ -166,8 +166,8 @@
       "name": "compiler: what the corpus writes (shapes)",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build compiler",
-      "program": "${workspaceFolder}/compiler/bin/Debug/net10.0/CupriLex.Compiler.dll",
+      "preLaunchTask": "build cli",
+      "program": "${workspaceFolder}/cli/bin/Debug/net10.0/cuprilex.dll",
       "args": [
         "shapes"
       ],

@@ -1,9 +1,11 @@
-﻿namespace CupriLex.Compiler;
+﻿using CupriLex.Compiler;
+
+namespace CupriLex.Cli;
 
 /// <summary>
 /// What the corpus actually writes, counted from syntax trees rather than guessed.
 ///
-///     dotnet run --project compiler -- shapes
+///     dotnet run --project cli -- shapes
 ///
 /// <para>The corpus survey in <c>tools/survey.py</c> counts GSAP calls with a regular expression,
 /// which is the right instrument for "how much of this is there". It cannot answer the question
@@ -143,10 +145,10 @@ public static class Program
         Console.WriteLine("""
             What the corpus writes, and how much of it can be resolved without running it.
 
-                dotnet run --project compiler -- shapes [--limit N] [--json FILE]
-                dotnet run --project compiler -- reach  [--limit N]
-                dotnet run --project compiler -- faces  [--limit N]
-                dotnet run --project compiler -- translate <block> [--out FILE]
+                dotnet run --project cli -- shapes [--limit N] [--json FILE]
+                dotnet run --project cli -- reach  [--limit N]
+                dotnet run --project cli -- faces  [--limit N]
+                dotnet run --project cli -- translate <block> [--out FILE]
 
             Needs the corpus: python tools/fetch-corpus.py
             """);

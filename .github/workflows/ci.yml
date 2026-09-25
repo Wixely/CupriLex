@@ -1,0 +1,128 @@
+#
+# CupriLex CI.
+#
+# This repository had none until the day it published a package, which is a worse order than it
+# sounds: everything here was built and tested on one machine, by hand, and nothing said so.
+#
+# Two jobs. `build` runs on every push and pull request and is the one that has to stay honest.
+# `publish` runs only on a tag and packs what `build` has already proved.
+#
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # The engine packages live on a private feed, and restore needs a token even for a public
+      # package: GitHub Packages authenticates NuGet reads, unlike its npm and Maven registries.
+      - name: Authenticate the package feed
+        run: >
+          dotnet nuget update source GitHub-Wixely-Packages
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      # The corpus is somebody else's work and is not vendored. Fetching it here is what makes the
+      # corpus-shaped tests mean anything; without it they skip and the suite reports green on
+      # about a dozen fewer assertions than it looks like it ran.
+      - name: Fetch the corpus
+        run: python tools/fetch-corpus.py
+
+      # xunit v3 self-hosts. `dotnet test` does not work against it on this SDK, which cost an
+      # afternoon to find out, so the test project is RUN and its exit code is the result.
+      - name: Test
+        run: dotnet run --project tests/CupriLex.Harness.Tests -c Release --no-build
+
+      # The conformance matrix is measured, not asserted: it renders documents and records what
+      # the engine did. Running it on CI proves the probe still works and that the committed
+      # matrix was produced by something that executes.
+      - name: Conformance matrix
+        run: dotnet run --project conformance -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack compiler -c Release --no-build -o dist
+
+      # The check CupriFace learned the hard way: v0.28.0 announced CupriFace.Woff2 in its release
+      # notes and packed nine packages. Everything else passed. So anything that does not opt out
+      # with IsPackable=false must produce a nupkg, or this fails naming the project.
+      - name: Every packable project produced a package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for proj in compiler/*.csproj harness/*.csproj cli/*.csproj conformance/*.csproj; do
+            grep -q '<IsPackable>false</IsPackable>' "$proj" && continue
+            name=$(basename "$proj" .csproj)
+            id=$(grep -oP '(?<=<PackageId>)[^<]+' "$proj" || echo "$name")
+            ls dist/"$id".*.nupkg >/dev/null 2>&1 || {
+              echo "::error::$name is packable and produced no nupkg. Give it IsPackable=false, or find out why pack skipped it."
+              exit 1
+            }
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/*.nupkg
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Authenticate the package feed
+        run: >
+          dotnet nuget update source GitHub-Wixely-Packages
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
+
+      # The tag is the version, so a release cannot disagree with what it publishes.
+      - name: Pack at the tagged version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          dotnet pack compiler -c Release -p:Version="$version" -o dist
+
+      - name: Publish
+        run: >
+          dotnet nuget push "dist/*.nupkg"
+          --source GitHub-Wixely-Packages
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --skip-duplicate

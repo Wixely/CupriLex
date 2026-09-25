@@ -1,4 +1,4 @@
-namespace CupriLex.Compiler;
+﻿namespace CupriLex.Compiler;
 
 /// <summary>Something that could not be carried, named where it was written.</summary>
 /// <param name="What">One line, in the author's vocabulary rather than the compiler's.</param>
@@ -14,7 +14,7 @@ public sealed record Refusal(string What, int Line = 0)
 /// <param name="Name">A CSS property, or one of the transform components this compiler tracks
 /// separately so that several tweens on the same element can be merged into one
 /// <c>transform</c>.</param>
-public sealed record Track(string Name, double From, double To, string Unit);
+internal sealed record Track(string Name, double From, double To, string Unit);
 
 /// <summary>
 /// One tween, resolved: when it starts, how long it runs, what it moves, and on what.
@@ -25,7 +25,7 @@ public sealed record Track(string Name, double From, double To, string Unit);
 /// <param name="Duration">Seconds. Zero for a <c>set</c>, which is a state change with no travel.</param>
 /// <param name="Ease">The GSAP ease name, kept as written so the sampler can say what it did not
 /// know rather than silently using linear.</param>
-public sealed record Tween(
+internal sealed record Tween(
     string Selector,
     double Start,
     double Duration,
@@ -38,7 +38,7 @@ public sealed record Tween(
 /// <param name="Refusals">What was not. Includes every tween that could not be resolved, by name.</param>
 /// <param name="Seconds">The end of the last tween - the composition's own idea of how long it is,
 /// which is not always what <c>data-duration</c> claims.</param>
-public sealed record Motion(
+internal sealed record Motion(
     IReadOnlyList<Tween> Tweens, IReadOnlyList<Refusal> Refusals, double Seconds)
 {
     public static readonly Motion Nothing = new([], [], 0);
@@ -52,7 +52,7 @@ public sealed record Motion(
 /// is refused by name rather than emitted into a declaration that would parse, run, and change
 /// nothing - which is the failure this whole repository is arranged around.</para>
 /// </summary>
-public static class Properties
+internal static class Properties
 {
     /// <summary>GSAP's name, the CSS or transform component it becomes, and the unit it carries.</summary>
     private static readonly Dictionary<string, (string Name, string Unit)> Known = new()

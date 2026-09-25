@@ -117,8 +117,8 @@ averages into the corpus number as though it were a measurement.
 ### The compiler has its own two instruments — `compiler/`
 
 ```
-dotnet run --project compiler -- shapes     # what the corpus WRITES, from syntax trees
-dotnet run --project compiler -- reach      # how much of it the compiler carries, and why not
+dotnet run --project cli -- shapes     # what the corpus WRITES, from syntax trees
+dotnet run --project cli -- reach      # how much of it the compiler carries, and why not
 ```
 
 `shapes` is the one to run before changing the compiler's scope. It classifies the arguments of

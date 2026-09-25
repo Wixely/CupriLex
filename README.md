@@ -139,6 +139,9 @@ Four verbs — `to`, `set`, `fromTo`, `from` — are 2618 of the calls. That is 
   See [docs/PACKAGE.md](docs/PACKAGE.md), and [docs/EXTERNAL.md](docs/EXTERNAL.md) for what a
   composition would fetch off the machine and who gets asked.
 
+  The translation is also a library, for a host that wants to do this at run time:
+  `CupriLex.Compiler`, alpha, see [docs/PACKAGING.md](docs/PACKAGING.md).
+
   ```
   dotnet run --project harness -- --all --package out
   ```

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,6 +8,14 @@
     <RootNamespace>CupriLex.Harness</RootNamespace>
     <AssemblyName>CupriLex.Harness</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Not published. This is an instrument, not a deliverable: it needs a headless browser, the
+      corpus on disk and a network, and it exists to measure the library rather than to be used
+      with it. The CI guard asks every project to say yes or no to being packed, and this is the
+      no.
+    -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(CupriFaceVersion)' == ''">

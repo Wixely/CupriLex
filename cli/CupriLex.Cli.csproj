@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CupriLex.Cli</RootNamespace>
+    <AssemblyName>cuprilex</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Not packed. These are the surveys this repository steers by - what the corpus writes, what
+      the compiler reaches, which typefaces it cannot answer - and they need the corpus on disk.
+      A consumer wants the library; nobody else wants a tool that walks corpus/registry/blocks.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\compiler\CupriLex.Compiler.csproj" />
+  </ItemGroup>
+
+</Project>

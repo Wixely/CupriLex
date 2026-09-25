@@ -1,4 +1,4 @@
-{
+﻿{
   "version": "2.0.0",
   "tasks": [
     {
@@ -13,12 +13,12 @@
       "group": "build"
     },
     {
-      "label": "build compiler",
+      "label": "build cli",
       "command": "dotnet",
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/compiler/CupriLex.Compiler.csproj"
+        "${workspaceFolder}/cli/CupriLex.Cli.csproj"
       ],
       "problemMatcher": "$msCompile",
       "group": "build"

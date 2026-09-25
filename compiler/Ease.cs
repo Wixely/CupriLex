@@ -1,4 +1,4 @@
-namespace CupriLex.Compiler;
+﻿namespace CupriLex.Compiler;
 
 /// <summary>
 /// GSAP's easing curves, as functions of progress.
@@ -14,7 +14,7 @@ namespace CupriLex.Compiler;
 /// linear loses only the shape of the acceleration, and the report says which blocks that
 /// happened to.</para>
 /// </summary>
-public static class Ease
+internal static class Ease
 {
     /// <summary>How many extra stops an eased tween is sampled into. The curve is only visible in
     /// the stops between its ends, and eight is where this started rather than where measurement

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Acornima.Ast;
 
 namespace CupriLex.Compiler;
@@ -10,7 +10,7 @@ namespace CupriLex.Compiler;
 /// everything else is <see cref="Unknown"/> - which is not a failure mode but the point: a value
 /// this domain cannot represent becomes a refusal with a reason, never a guess.</para>
 /// </summary>
-public abstract record Value
+internal abstract record Value
 {
     public sealed record Number(double Of) : Value;
 
@@ -56,7 +56,7 @@ public abstract record Value
 /// <summary>Names in scope, and what they were bound to. A name assigned more than once is bound
 /// to <see cref="Value.Unknown"/>: this compiler does not track flow, and a variable that changes
 /// is a variable whose value at any particular call is not knowable from the syntax.</summary>
-public sealed class Scope(Scope? parent = null)
+internal sealed class Scope(Scope? parent = null)
 {
     private readonly Dictionary<string, Value> _names = [];
 
@@ -122,7 +122,7 @@ file static class DictionaryExtensions
 /// <c>2 + 3</c> - plus a lookup table of DOM queries whose only outcome is a CSS selector string.
 /// Anything outside that whitelist evaluates to <see cref="Value.Unknown"/> and is refused.</para>
 /// </summary>
-public static class Evaluator
+internal static class Evaluator
 {
     public static Value Of(Node? node, Scope scope) => node switch
     {

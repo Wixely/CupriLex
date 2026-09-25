@@ -16,7 +16,7 @@ namespace CupriLex.Compiler;
 /// transform rather than returning the half it understood. Half of a transform is not a smaller
 /// truth, it is a different element position.</para>
 /// </summary>
-public static class Transform
+internal static class Transform
 {
     /// <summary>Reads <paramref name="css"/> into <paramref name="values"/>, adding nothing if any
     /// part of it cannot be read.</summary>

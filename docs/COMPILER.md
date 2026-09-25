@@ -3,9 +3,9 @@
 **Timelines in, `@keyframes` out, and a refusal by name for everything that could not come.**
 
 ```
-dotnet run --project compiler -- shapes            # what the corpus writes
-dotnet run --project compiler -- reach             # how much of it is carried
-dotnet run --project compiler -- translate <block> # one block, with its CSS
+dotnet run --project cli -- shapes            # what the corpus writes
+dotnet run --project cli -- reach             # how much of it is carried
+dotnet run --project cli -- translate <block> # one block, with its CSS
 ```
 
 The whole feature, and the reason there is no subset of this corpus that works without it: all 187

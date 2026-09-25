@@ -43,7 +43,26 @@ public static class Corpus
         new(name + @"\s*=\s*[""']([\d.]+)[""']", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>The compiler's copy, so there is one answer to where the corpus is.</summary>
-    public static string Root() => CorpusPath.Blocks();
+    /// <summary>
+    /// Where the corpus is.
+    ///
+    /// <para>A second copy of this walk - the compiler's survey tool has the other one. It used to
+    /// be shared, from a type in the compiler, and that type was then published to anyone who
+    /// referenced the library. Twelve lines of directory walk is a smaller cost than a corpus path
+    /// in somebody else's package.</para>
+    /// </summary>
+    public static string Root()
+    {
+        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        {
+            var candidate = Path.Combine(d.FullName, "corpus", "registry", "blocks");
+            if (Directory.Exists(candidate)) return candidate;
+        }
+
+        throw new DirectoryNotFoundException(
+            "No corpus/registry/blocks above " + AppContext.BaseDirectory
+            + ". Run: python tools/fetch-corpus.py");
+    }
 
     public static IReadOnlyList<Block> All()
     {

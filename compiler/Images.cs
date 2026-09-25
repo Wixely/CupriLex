@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
@@ -18,7 +18,7 @@ namespace CupriLex.Compiler;
 /// animation both find the element by them: rewriting the tag and losing the class would trade one
 /// invisible image for a whole broken layout.</para>
 /// </summary>
-public static partial class Images
+internal static partial class Images
 {
     /// <summary>
     /// Attributes that mean something only to a browser's image loader. Dropped rather than

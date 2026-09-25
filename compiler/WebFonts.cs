@@ -6,6 +6,7 @@ namespace CupriLex.Compiler;
 
 /// <summary>A face that was fetched and will travel in the package.</summary>
 /// <param name="Key">The name the rewritten markup refers to it by, and the asset key.</param>
+/// <param name="Range">The subset this file covers, as the service declared it.</param>
 public sealed record Web(
     string Family, int Weight, string Style, string Key, byte[] Bytes, string From,
     string? Range = null);

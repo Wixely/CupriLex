@@ -95,6 +95,26 @@ public static class Reporting
             report.AppendLine();
         }
 
+        if (dropped.Unresolved.Count > 0)
+        {
+            report.AppendLine("## Font stacks this package cannot answer");
+            report.AppendLine();
+            report.AppendLine("Each of these names no face that travels in this package, so a "
+                              + "renderer with a strict font policy will refuse it. **Only a "
+                              + "substitution fixes them, and CupriLex will not pick a typeface "
+                              + "nobody asked for.** `decisions.json` in this package says the "
+                              + "same thing as data, for a tool that can offer a choice.");
+            report.AppendLine();
+            report.AppendLine("| what the author wrote | wants a | in |");
+            report.AppendLine("|---|---|---|");
+
+            foreach (var one in dropped.Unresolved.OrderByDescending(u => u.Declarations))
+                report.AppendLine($"| `{one.Stack}` | {one.Class.ToString().ToLowerInvariant()} "
+                                  + $"| {one.Declarations} declaration(s) |");
+
+            report.AppendLine();
+        }
+
         if (dropped.Families.Count > 0)
         {
             report.AppendLine("## Font families removed from the stacks");

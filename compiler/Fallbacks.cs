@@ -3,9 +3,48 @@ using AngleSharp.Html.Dom;
 
 namespace CupriLex.Compiler;
 
+/// <summary>The class of typeface a stack was asking for, as far as its own generic says.</summary>
+public enum Typeface
+{
+    /// <summary>The stack named no generic, so nothing here knows what class was wanted.</summary>
+    Unknown,
+    Sans,
+    Serif,
+    Monospace,
+    Cursive,
+    Fantasy,
+}
+
+/// <summary>
+/// A font stack this package cannot answer, described so that a SYSTEM can decide what to do
+/// about it.
+///
+/// <para>Every field is here to be acted on rather than read. A host that wants to substitute
+/// needs to know what was asked for (<paramref name="Wanted"/>), what kind of face would do
+/// (<paramref name="Class"/>), and how much of the composition is affected
+/// (<paramref name="Declarations"/>). A host that wants to ask a person needs the stack exactly as
+/// the author wrote it.</para>
+///
+/// <para>Nothing here is a recommendation. CupriLex will not pick a typeface nobody asked for -
+/// the choice belongs to whoever is publishing the composition, and the whole point of flagging it
+/// is that they get to make it.</para>
+/// </summary>
+/// <param name="Stack">The declaration's value, as authored.</param>
+/// <param name="Wanted">The real families it named, in the author's order of preference. Empty
+/// only when the stack was a bare generic.</param>
+/// <param name="Class">What kind of face would satisfy it.</param>
+/// <param name="Declarations">How many declarations in this document write this stack.</param>
+public sealed record Unresolved(
+    string Stack, IReadOnlyList<string> Wanted, Typeface Class, int Declarations);
+
 /// <summary>What a rewrite of the font stacks removed, by family, with how many declarations
 /// named it.</summary>
-public sealed record Dropped(IReadOnlyDictionary<string, int> Families, int Declarations);
+/// <param name="Unresolved">Stacks left naming no face at all. These are the ones a renderer with
+/// a strict font policy will refuse, and the ones a host has to decide about.</param>
+public sealed record Dropped(
+    IReadOnlyDictionary<string, int> Families,
+    int Declarations,
+    IReadOnlyList<Unresolved> Unresolved);
 
 /// <summary>
 /// Font stacks trimmed to the faces a package can actually answer.
@@ -47,6 +86,7 @@ public static partial class Fallbacks
     public static Dropped Trim(IHtmlDocument document, IReadOnlySet<string> carried)
     {
         var dropped = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var unresolved = new Dictionary<string, Unresolved>(StringComparer.Ordinal);
         var touched = 0;
 
         // What the document itself says a generic means. See Pairings: a stack of
@@ -86,6 +126,21 @@ public static partial class Fallbacks
                     ? means[generic]
                     : null;
 
+                // Nothing real is left and the document gave no clue what it meant. This is the
+                // stack a strict renderer refuses, and the one a host has to decide about.
+                if (named is null && kept.All(k => IsGeneric(Unquote(k))))
+                {
+                    // Collapsed, not reformatted: a stack written across five indented lines in
+                    // the source is the same stack, and a host putting it in front of a person
+                    // wants the families and their order rather than the CSS layout.
+                    var authored = Whitespace().Replace(value, " ").Trim();
+
+                    unresolved[authored] = unresolved.TryGetValue(authored, out var already)
+                        ? already with { Declarations = already.Declarations + 1 }
+                        : new Unresolved(authored, [.. lost],
+                            Class(kept.Select(Unquote).Concat(lost)), 1);
+                }
+
                 if (lost.Count == 0 && named is null) return match.Value;
 
                 foreach (var family in lost)
@@ -106,7 +161,46 @@ public static partial class Fallbacks
             if (element.GetAttribute("style") is { Length: > 0 } inline)
                 element.SetAttribute("style", Rewrite(inline));
 
-        return new Dropped(dropped, touched);
+        return new Dropped(dropped, touched, [.. unresolved.Values]);
+    }
+
+    /// <summary>
+    /// What kind of face a stack wanted.
+    ///
+    /// <para>The generic first, because that is the author saying it outright. Failing that, the
+    /// names: a stack of <c>Menlo, Monaco, Consolas</c> with no generic at the end is still
+    /// unmistakably asking for a monospace, and a host deciding what to substitute should not have
+    /// to infer that for itself.</para>
+    /// </summary>
+    private static Typeface Class(IEnumerable<string> families)
+    {
+        var all = families.Select(f => f.ToLowerInvariant()).ToArray();
+
+        foreach (var family in all)
+        {
+            var known = family switch
+            {
+                "monospace" or "ui-monospace" => Typeface.Monospace,
+                "serif" or "ui-serif" => Typeface.Serif,
+                "sans-serif" or "ui-sans-serif" or "ui-rounded" or "system-ui" => Typeface.Sans,
+                "cursive" => Typeface.Cursive,
+                "fantasy" => Typeface.Fantasy,
+                _ => Typeface.Unknown,
+            };
+
+            if (known is not Typeface.Unknown) return known;
+        }
+
+        // No generic. The commonest system monospaces, named: these are exactly the stacks that
+        // arrive with no generic and mean one thing.
+        string[] monos = ["menlo", "monaco", "consolas", "courier new", "courier", "sf mono",
+                          "andale mono", "lucida console", "dejavu sans mono", "liberation mono"];
+
+        if (all.Any(f => monos.Contains(f) || f.Contains("mono"))) return Typeface.Monospace;
+        if (all.Any(f => f is "georgia" or "times" or "times new roman" or "garamond"))
+            return Typeface.Serif;
+
+        return Typeface.Unknown;
     }
 
     /// <summary>
@@ -170,6 +264,9 @@ public static partial class Fallbacks
         @"@font-face\s*\{[^}]*?font-family\s*:\s*(?<family>[^;}]+)",
         RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex FontFace();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     /// <summary>Split a stack on commas that are not inside quotes.</summary>
     private static IEnumerable<string> Split(string value)

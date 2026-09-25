@@ -1,4 +1,4 @@
-# External requests: what leaves the machine, and who said so
+﻿# External requests: what leaves the machine, and who said so
 
 A composition written for a browser fetches things. A font service, usually: 64 of the corpus's
 187 blocks link or `@import` a stylesheet from `fonts.googleapis.com`, which then names files on
@@ -123,4 +123,11 @@ carries are used.
 
 Where a document names nothing but proprietary system faces — `Menlo, Monaco, Consolas,
 "Courier New", monospace` — there is no such evidence, and carrying a stand-in would mean choosing
-a typeface nobody asked for. Those are left, and reported.
+a typeface nobody asked for.
+
+Those are **flagged for a system to decide**, in `decisions.json` inside the package and in
+`Dropped.Unresolved` from the library: the stack as authored, the families the author wanted in
+order, the class of face that would satisfy it, and how many declarations depend on it. See
+[PACKAGE.md](PACKAGE.md). Some of them name a family that is freely licensed and would resolve by
+name — Inter is wanted by 44 packages and never linked — which is a fetch a host can choose to
+make and CupriLex will not make on its behalf.

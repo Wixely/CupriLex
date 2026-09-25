@@ -79,6 +79,41 @@ that is named can be fixed; one that has been quietly removed cannot.
 
 ---
 
+## `decisions.json`: what a system has to choose
+
+CupriLex will not pick a typeface nobody asked for. Where a font stack names no face the package
+can answer, it is flagged as data rather than resolved:
+
+```json
+{
+  "block": "code-snippet-visual-studio-light",
+  "fonts": [
+    { "stack": "Menlo, Monaco, Consolas, \"Courier New\", monospace",
+      "wanted": ["Menlo", "Monaco", "Consolas", "Courier New"],
+      "class": "monospace",
+      "declarations": 2 }
+  ]
+}
+```
+
+Every field is there to be acted on. `wanted` is the author's order of preference, so a host can
+offer the first one it can license or find. `class` is the useful one: that stack is unmistakably
+asking for a monospace even though every name in it belongs to an operating system, and a host
+should not have to work that out before it can offer a replacement. `declarations` says how much of
+the composition turns on it.
+
+**A separate entry rather than a field in the manifest.** `project.json` is CupriCut's schema; this
+is not part of it. A zip entry nothing looks for is ignored, while a property nothing expects is a
+guess about somebody else's parser. `report.md` says the same thing in prose for whoever opens the
+file, and `meta.notes` points at it.
+
+Across the corpus: **112 of 187 packages carry one**, flagging 160 stacks — 117 sans, 40 monospace,
+3 serif. The families most often wanted are Inter (44), Segoe UI (26) and the Menlo/Monaco/Consolas
+group (24 each). Inter and Bebas Neue are freely licensed and would resolve by name; the rest belong
+to an operating system, which is exactly the decision a host is better placed to make.
+
+---
+
 ## The report is a deliverable
 
 `report.md` travels inside the package because that is the only place it stays attached to the

@@ -133,6 +133,66 @@ public class FallbackTests
         Assert.Equal(1, dropped.Families["Georgia"]);
     }
 
+    // ---- what a system is handed to decide about -----------------------------------------------
+
+    [Fact]
+    public void A_stack_naming_no_answerable_face_is_flagged_for_a_decision()
+    {
+        var (_, dropped) = Trim(".a { font-family: Menlo, Monaco, \"Courier New\", monospace; }");
+
+        var one = Assert.Single(dropped.Unresolved);
+
+        Assert.Equal(Typeface.Monospace, one.Class);
+        Assert.Equal(["Menlo", "Monaco", "Courier New"], one.Wanted);
+        Assert.Equal(1, one.Declarations);
+    }
+
+    [Fact]
+    public void The_class_is_read_from_the_names_when_there_is_no_generic()
+    {
+        // `Menlo, Monaco, Consolas` with no generic at the end is still unmistakably asking for a
+        // monospace, and a host offering a replacement should not have to work that out itself.
+        var (_, dropped) = Trim(".a { font-family: Menlo, Monaco, Consolas; }");
+
+        Assert.Equal(Typeface.Monospace, Assert.Single(dropped.Unresolved).Class);
+    }
+
+    [Fact]
+    public void A_stack_that_ends_up_answered_is_not_flagged()
+    {
+        var (_, dropped) = Trim(".a { font-family: \"Inter\", Arial, sans-serif; }", "Inter");
+
+        Assert.Empty(dropped.Unresolved);
+    }
+
+    [Fact]
+    public void A_generic_the_document_itself_explains_is_not_a_decision_for_anyone_else()
+    {
+        // The author paired Space Mono with monospace in one rule; the bare monospace in the
+        // other means the same face. Nothing to decide.
+        var document = Parser.ParseDocument("""
+            <html><head><style>
+              @font-face { font-family: "Space Mono"; src: url('a.woff2'); }
+              .a { font-family: "Space Mono", monospace; }
+              .b { font-family: monospace; }
+            </style></head><body></body></html>
+            """);
+
+        var dropped = Fallbacks.Trim(document, Fallbacks.Carried(document));
+
+        Assert.Empty(dropped.Unresolved);
+        Assert.Contains("\"Space Mono\", monospace", document.ToHtml());
+    }
+
+    [Fact]
+    public void The_flagged_stack_is_collapsed_rather_than_reformatted()
+    {
+        var (_, dropped) = Trim(
+            ".a { font-family: Menlo,\n      Monaco,\n      monospace; }");
+
+        Assert.Equal("Menlo, Monaco, monospace", Assert.Single(dropped.Unresolved).Stack);
+    }
+
     [Fact]
     public void Nothing_is_rewritten_when_there_is_nothing_to_drop()
     {

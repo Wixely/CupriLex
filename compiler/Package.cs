@@ -58,6 +58,20 @@ public static class Package
     /// console scrollback is a package nobody can audit six months later.</summary>
     public const string Report = "report.md";
 
+    /// <summary>
+    /// The decisions this package could not make, for a system rather than a person.
+    ///
+    /// <para>Written only when there are any. <see cref="Report"/> says the same thing in prose,
+    /// which is right for whoever opens the file and useless to a pipeline: a host that wants to
+    /// offer a typeface, or pick one by policy, needs the stack, the families the author actually
+    /// asked for, and what class of face would satisfy them - as data.</para>
+    ///
+    /// <para>It is a separate entry rather than a field in the manifest because the manifest is
+    /// CupriCut's schema and this is not part of it. An entry nothing looks for is ignored; a
+    /// property nothing expects is a guess about somebody else's parser.</para>
+    /// </summary>
+    public const string Decisions = "decisions.json";
+
     private static readonly HtmlParser Parser = new();
 
     private static readonly JsonSerializerOptions Json = new()
@@ -130,6 +144,19 @@ public static class Package
         {
             Text(zip, Manifest, JsonSerializer.Serialize(project, Json));
             Text(zip, Report, Reporting.Of(composition, collected, seconds, freed, dropped));
+
+            if (dropped.Unresolved.Count > 0)
+                Text(zip, Decisions, JsonSerializer.Serialize(new Pending
+                {
+                    Block = composition.Name,
+                    Fonts = [.. dropped.Unresolved.Select(u => new PendingFont
+                    {
+                        Stack = u.Stack,
+                        Wanted = u.Wanted,
+                        Class = u.Class.ToString().ToLowerInvariant(),
+                        Declarations = u.Declarations,
+                    })],
+                }, Json));
 
             foreach (var asset in collected.Entries)
             {
@@ -233,6 +260,12 @@ public static class Package
                       + "package has render.duration, and carrying both costs the element its one "
                       + "animation slot.");
 
+        if (dropped.Unresolved.Count > 0)
+            notes.Add($"{dropped.Unresolved.Count} font stack(s) name no face this package can "
+                      + "answer and will be refused by a strict font policy. "
+                      + Decisions + " lists them, with what each one asked for and what class of "
+                      + "typeface would satisfy it. CupriLex does not choose a substitute.");
+
         if (dropped.Families.Count > 0)
             notes.Add($"{dropped.Families.Count} font family/families were removed from "
                       + $"{dropped.Declarations} font stack(s) - "
@@ -250,6 +283,43 @@ public static class Package
             is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".avif"
             or ".woff" or ".woff2" or ".mp3" or ".m4a" or ".aac" or ".ogg"
             or ".flac" or ".mp4" or ".webm" or ".zip";
+
+    /// <summary>
+    /// <c>decisions.json</c>: what a host has to choose, and everything it needs to choose with.
+    ///
+    /// <para>Ours, unlike the manifest, and shaped for a machine. <c>class</c> is the useful field:
+    /// a stack of <c>Menlo, Monaco, Consolas</c> is unmistakably asking for a monospace even
+    /// though every name in it belongs to an operating system, and a host should not have to work
+    /// that out for itself before it can offer a replacement.</para>
+    /// </summary>
+    private sealed class Pending
+    {
+        /// <summary>Which composition these belong to, so a pipeline handling many can say.</summary>
+        public string Block { get; init; } = string.Empty;
+
+        /// <summary>Font stacks that name no face this package can answer. A renderer with a
+        /// strict policy refuses each of these; a substitution is the only thing that fixes
+        /// them, and CupriLex will not choose one.</summary>
+        public List<PendingFont> Fonts { get; init; } = [];
+    }
+
+    private sealed class PendingFont
+    {
+        /// <summary>The declaration as the author wrote it.</summary>
+        public string Stack { get; init; } = string.Empty;
+
+        /// <summary>The real families it named, in the author's order of preference. Empty when
+        /// the stack was a bare generic and named nothing at all.</summary>
+        public IReadOnlyList<string> Wanted { get; init; } = [];
+
+        /// <summary>monospace, serif, sans, cursive, fantasy - or unknown, when neither a generic
+        /// nor a recognisable name says.</summary>
+        public string Class { get; init; } = "unknown";
+
+        /// <summary>How many declarations in this composition write this stack. A host choosing
+        /// what to spend a download on wants to know which one is load-bearing.</summary>
+        public int Declarations { get; init; }
+    }
 
     // ---- the manifest, which is CupriCut's schema and not ours --------------------------------
 

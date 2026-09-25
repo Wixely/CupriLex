@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AngleSharp;
 using CupriLex.Compiler;
 
 namespace CupriLex.Harness;
@@ -123,7 +124,8 @@ public static class Program
             if (align) return await AlignAsync(blocks[0], samples, Engine.FindFonts());
 
             // Packaging renders nothing, so it comes before the browser is launched.
-            if (Option(args, "--package") is { Length: > 0 } into) return Packaging(blocks, into);
+            if (Option(args, "--package") is { Length: > 0 } into)
+                return await PackagingAsync(blocks, into, Option(args, "--download"));
 
             if (limit > 0) blocks = [.. blocks.Take(limit)];
 
@@ -150,35 +152,46 @@ public static class Program
     /// <para>Nothing is rendered. A package is the end of the pipeline and not a measurement, so
     /// it costs no browser and no engine.</para>
     /// </summary>
-    private static int Packaging(IReadOnlyList<Block> blocks, string into)
+    private static async Task<int> PackagingAsync(
+        IReadOnlyList<Block> blocks, string into, string? download)
     {
         Directory.CreateDirectory(into);
+
+        var translations = blocks.ToDictionary(
+            block => block.Name,
+            block => Translator.Of(File.ReadAllText(block.Path)));
+
+        // Asked once, for the whole run, BEFORE anything is fetched or written. A prompt that
+        // arrived block by block would be a hundred and eighty-seven decisions nobody can make.
+        var consent = Decide(translations.Values, download);
 
         Console.WriteLine($"packaging {blocks.Count} block(s) into {into}");
         Console.WriteLine();
 
+        using var fetch = new Http();
         long total = 0;
         var refused = 0;
         var missing = 0;
+        var fetched = 0;
 
         foreach (var block in blocks)
         {
-            var directory = block.Directory;
+            var translated = translations[block.Name];
 
-            // Translated WITHOUT a directory, so its URLs stay as the author wrote them. The
-            // harness rebases them to absolute paths for rendering, which is right there and
-            // exactly wrong here: a package needs the relative reference in order to flatten it
-            // to an asset key, and an absolute path would travel to a machine that has no such
-            // path on it.
-            var translated = Translator.Of(File.ReadAllText(block.Path));
+            var document = new AngleSharp.Html.Parser.HtmlParser()
+                .ParseDocument(translated.Html);
+
+            var gathered = await WebFonts.GatherAsync(document, consent, fetch);
+            fetched += gathered.Faces.Count;
 
             var composition = new Composition(
-                block.Name, translated.Html, translated.Motion, translated.Refusals,
+                block.Name, document.ToHtml(), translated.Motion, translated.Refusals,
                 block.Width, block.Height, block.Duration,
                 Description: $"Translated from {Path.GetFileName(block.Path)} by CupriLex.");
 
-            var written = Package.Write(composition, directory,
-                Path.Combine(into, block.Slug + Package.Extension));
+            var written = Package.Write(composition, block.Directory,
+                Path.Combine(into, block.Slug + Package.Extension),
+                [.. gathered.Faces.Select(f => new Asset(f.Key, f.From, f.Bytes))]);
 
             total += written.Bytes;
             refused += translated.Refusals.Count;
@@ -188,20 +201,73 @@ public static class Program
                               + $"{written.Assets.Count,3} asset(s)  "
                               + $"{translated.Motion.Elements,3} animated  "
                               + $"{translated.Refusals.Count,3} refused"
-                              + (written.Missing.Count > 0
-                                  ? $"  {written.Missing.Count} MISSING"
-                                  : ""));
+                              + (gathered.Faces.Count > 0 ? $"  {gathered.Faces.Count} fetched" : "")
+                              + (written.Missing.Count > 0 ? $"  {written.Missing.Count} MISSING" : ""));
         }
 
         Console.WriteLine();
         Console.WriteLine($"{blocks.Count} package(s), {total / 1024.0 / 1024.0:n1} MB, "
                           + $"{refused} refusal(s) recorded in them");
 
+        if (fetched > 0)
+            Console.WriteLine($"{fetched} font file(s) were fetched and are carried inside the "
+                              + "packages, so nothing reaches for a network when they render.");
+
         if (missing > 0)
             Console.WriteLine($"{missing} reference(s) named a file that was not beside the block. "
                               + "Each package names its own; none were silently dropped.");
 
         return 0;
+    }
+
+    /// <summary>
+    /// What the person running this agreed to let off the machine.
+    ///
+    /// <para>Nothing is fetched by default. A tool that reaches the network unless told not to has
+    /// made the decision for whoever is running it, and "it only downloads fonts" is a sentence
+    /// about this version rather than about the design.</para>
+    ///
+    /// <para><c>--download all</c> approves everything. <c>--download none</c>, or no flag at all,
+    /// approves nothing. Anything else prints the full list of requests and reads an answer, which
+    /// is the shape a settings screen or a first-run prompt wants: the same list, the same
+    /// decision, somewhere with buttons.</para>
+    /// </summary>
+    private static IConsent Decide(IEnumerable<Translated> translations, string? download)
+    {
+        if (string.Equals(download, "none", StringComparison.OrdinalIgnoreCase)) return Consent.None;
+        if (string.Equals(download, "all", StringComparison.OrdinalIgnoreCase)) return Consent.All;
+
+        var parser = new AngleSharp.Html.Parser.HtmlParser();
+        var requests = translations
+            .SelectMany(t => External.Of(parser.ParseDocument(t.Html)))
+            .Where(r => r.Kind is Fetches.Stylesheet or Fetches.Font)
+            .GroupBy(r => r.Url, StringComparer.OrdinalIgnoreCase)
+            .Select(g => (Request: g.First(), Count: g.Count()))
+            .OrderByDescending(r => r.Count)
+            .ToArray();
+
+        if (requests.Length == 0) return Consent.None;
+        if (download is null && Console.IsInputRedirected) return Consent.None;
+
+        Console.WriteLine();
+        Console.WriteLine($"These {requests.Length} request(s) would be made off this machine:");
+        Console.WriteLine();
+
+        foreach (var (request, count) in requests)
+            Console.WriteLine($"  [{count,3} block(s)] {request.Url}");
+
+        Console.WriteLine();
+        Console.WriteLine("Hosts: " + string.Join(", ",
+            requests.Select(r => r.Request.Host).Distinct().Order()));
+        Console.WriteLine();
+        Console.Write("Fetch them? [a]ll / [n]one / list hosts to allow: ");
+
+        var answer = (Console.ReadLine() ?? string.Empty).Trim();
+
+        if (answer.StartsWith('a')) return Consent.All;
+        if (answer.Length == 0 || answer.StartsWith('n')) return Consent.None;
+
+        return Consent.Hosts(answer.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>
@@ -711,6 +777,9 @@ public static class Program
                 --report FILE  re-summarise a finished run's baseline.json, rendering nothing
                 --package DIR  write each block as a .cutpkg and render nothing: one file with
                                its assets, its fonts and its report inside
+                --download W   what may be fetched off this machine while packaging:
+                               "all", "none" (the default), or omit it to be shown
+                               every request and asked
 
             Needs the corpus: python tools/fetch-corpus.py
             """);

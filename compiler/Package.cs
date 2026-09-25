@@ -68,10 +68,22 @@ public static class Package
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static Packaged Write(Composition composition, string? directory, string path)
+    /// <param name="carried">Assets that did not come from disk - faces fetched from a font
+    /// service with consent, for instance. They are written into the package exactly like the
+    /// files beside the block, because by the time a package is opened there is no difference
+    /// between them.</param>
+    public static Packaged Write(Composition composition, string? directory, string path,
+        IReadOnlyList<Asset>? carried = null)
     {
         var document = Parser.ParseDocument(composition.Html);
-        var collected = Assets.Collect(document, directory);
+
+        var already = new HashSet<string>(
+            carried?.Select(a => a.Key) ?? [], StringComparer.OrdinalIgnoreCase);
+
+        var collected = Assets.Collect(document, directory, already);
+
+        if (carried is { Count: > 0 })
+            collected = collected with { Entries = [.. collected.Entries, .. carried] };
         var freed = FreeTheWindowSlot(document, composition.Motion.Selectors);
 
         // After the assets, because what the package CARRIES is what a stack may name, and the

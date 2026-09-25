@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
@@ -40,14 +40,23 @@ public static class Assets
     /// <param name="directory">Where the block's own files live. Null means the document has no
     /// folder to resolve against, so every relative reference is reported missing rather than
     /// guessed at.</param>
-    public static Collected Collect(IHtmlDocument document, string? directory)
+    /// <param name="carried">Keys the package already holds from somewhere other than disk - a
+    /// face fetched from a font service, say. A reference to one of these is neither collected nor
+    /// reported missing: it is already answered, and looking for it beside the block would find
+    /// nothing and say so, which would be true of the disk and false of the package.</param>
+    public static Collected Collect(
+        IHtmlDocument document, string? directory, IReadOnlySet<string>? carried = null)
     {
+        carried ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var found = new Dictionary<string, Asset>(StringComparer.Ordinal);
         var missing = new List<string>();
         var taken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         string? Take(string url)
         {
+            if (carried.Contains(url.Trim())) return null;
+
             if (Resolve(url, directory) is not { } source)
             {
                 if (Relative(url) && !missing.Contains(url)) missing.Add(url);

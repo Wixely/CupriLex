@@ -136,7 +136,8 @@ Four verbs — `to`, `set`, `fromTo`, `from` — are 2618 of the calls. That is 
 - **Not a runtime dependency.** A composition is translated **once**, into a `.cutpkg` that is
   already self-contained — one zip with the markup, the assets, the fonts and the report inside.
   A project that has been imported is just a project; nothing depends on this tool at render time.
-  See [docs/PACKAGE.md](docs/PACKAGE.md).
+  See [docs/PACKAGE.md](docs/PACKAGE.md), and [docs/EXTERNAL.md](docs/EXTERNAL.md) for what a
+  composition would fetch off the machine and who gets asked.
 
   ```
   dotnet run --project harness -- --all --package out

@@ -113,20 +113,22 @@ The size, the frame rate, the duration and every asset come back. `cupricut lint
 **Measured against it, package by package.** CupriCut was upgraded to 0.28.1 and every package
 linted:
 
-| | before trimming | after |
-|---|---|---|
-| cannot be built at all | 105 | **63** |
-| builds, lints as an error | 29 | 61 |
-| builds and lints clean | 53 | **63** |
+| | original | stacks trimmed | fonts fetched | generics paired |
+|---|---|---|---|---|
+| cannot be built at all | 105 | 63 | 63 | **49** |
+| builds, lints as an error | 29 | 61 | 61 | 61 |
+| builds and lints clean | 53 | 63 | 63 | **77** |
 
-The 42 packages that moved were all the same failure: a stack naming a face nothing could answer.
+Fetching moved nothing on its own, which was worth knowing: the faces it carried were already being
+kept by the trim, and what the failures actually turned on was the bare generic left behind.
+Pairing that generic with the face the document's own CSS names for it — see
+[EXTERNAL.md](EXTERNAL.md) — is what moved the last 14.
 
-**What is left, and none of it is the packaging.** 54 still fail on a font, and 51 of those are one
-cause — their stacks trim down to `monospace`, and CupriCut registers only Noto Sans, so nothing
-answers the generic. Shipping one monospace face there fixes 51 packages without a line changing
-here. Carrying a real monospace face in the package fixes them properly, and that is the fetch work
-still outstanding. The other 9 are the WOFF 2 decoder rejecting a Caveat font that every browser
-reads, which is an unfiled CupriFace defect.
+**What is left.** 40 packages still fail on a font and 39 are the same shape: a stack of nothing but
+proprietary system faces, `Menlo, Monaco, Consolas, "Courier New", monospace`, with no evidence in
+the document of which real typeface was meant. Carrying a stand-in would mean choosing one nobody
+asked for, so they are left and reported. The other 9 are the WOFF 2 decoder rejecting a Caveat
+font that every browser reads, an unfiled CupriFace defect.
 
 ---
 

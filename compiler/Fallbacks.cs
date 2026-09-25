@@ -49,6 +49,11 @@ public static partial class Fallbacks
         var dropped = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var touched = 0;
 
+        // What the document itself says a generic means. See Pairings: a stack of
+        // `"Space Mono", monospace` is the author telling us which face they meant by monospace,
+        // and a bare `monospace` elsewhere in the same document means the same thing.
+        var means = Pairings(document, carried);
+
         string Rewrite(string css)
         {
             return Declaration.Replace(css, match =>
@@ -70,13 +75,25 @@ public static partial class Fallbacks
                     else lost.Add(family);
                 }
 
-                if (lost.Count == 0) return match.Value;
+                // A stack that is nothing but a generic names no face at all. Where the
+                // document has already said which face it means by that generic, say it here too:
+                // a renderer that cannot answer `monospace` can answer `"Space Mono", monospace`,
+                // and both are the author's own words.
+                var named = kept.Count > 0
+                            && kept.All(k => IsGeneric(Unquote(k)))
+                            && kept.Select(k => Unquote(k))
+                                   .FirstOrDefault(g => means.ContainsKey(g)) is { } generic
+                    ? means[generic]
+                    : null;
+
+                if (lost.Count == 0 && named is null) return match.Value;
 
                 foreach (var family in lost)
                     dropped[family] = dropped.TryGetValue(family, out var seen) ? seen + 1 : 1;
 
                 touched++;
                 if (kept.Count == 0) kept.Add(Default);
+                if (named is not null) kept.Insert(0, $"\"{named}\"");
 
                 return match.Groups["lead"].Value + string.Join(", ", kept);
             });
@@ -90,6 +107,48 @@ public static partial class Fallbacks
                 element.SetAttribute("style", Rewrite(inline));
 
         return new Dropped(dropped, touched);
+    }
+
+    /// <summary>
+    /// What the document's own stacks say a generic means.
+    ///
+    /// <para>A stack of <c>"Space Mono", monospace</c> is the author naming the face they wanted
+    /// and the class it belongs to, in one line. So a bare <c>monospace</c> somewhere else in the
+    /// same document means that face too - and saying so is not a substitution, it is reading what
+    /// is already written.</para>
+    ///
+    /// <para>Worth doing because a bare generic is the one thing a package cannot carry. A
+    /// renderer with a strict font policy answers <c>sans-serif</c> only if some registered face
+    /// happens to serve it, and answers <c>monospace</c> with nothing at all unless a monospace
+    /// face was registered - measured, and 53 packages fail on exactly that. Only families the
+    /// package CARRIES are used, so this never names a face that is not in the file.</para>
+    /// </summary>
+    private static Dictionary<string, string> Pairings(
+        IHtmlDocument document, IReadOnlySet<string> carried)
+    {
+        var means = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        void Learn(string css)
+        {
+            foreach (Match match in Declaration.Matches(css))
+            {
+                var families = Split(match.Groups["value"].Value).Select(Unquote).ToArray();
+                if (families.Length < 2) continue;
+
+                var first = families[0];
+                if (first.Length == 0 || IsGeneric(first) || !carried.Contains(first)) continue;
+
+                foreach (var generic in families.Skip(1).Where(IsGeneric))
+                    means.TryAdd(generic, first);
+            }
+        }
+
+        foreach (var style in document.QuerySelectorAll("style")) Learn(style.TextContent);
+
+        foreach (var element in document.All)
+            if (element.GetAttribute("style") is { Length: > 0 } inline) Learn(inline);
+
+        return means;
     }
 
     /// <summary>The families a document answers itself, from its own <c>@font-face</c> rules.

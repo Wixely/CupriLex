@@ -155,7 +155,12 @@ Three of these were done early, in Milestone 3, because each was blocking the me
 compiler rather than merely improving on it: **colours to hex**, **`inset: 0` to a percentage
 size**, and **`<template>` inlined**. What is left:
 
-- `<img>` → `<cupri-image>`
+- ~~`<img>` → `<cupri-image>`~~ **Done**, and it was the largest single gain the corpus has had:
+  **38.3% → 40.8%**. Four blocks went from nothing to a perfect score, because the composition WAS
+  an image. It had been documented as done in two files for weeks while no code did it, which is
+  the one kind of mistake this repository is arranged to catch and did not - the harness never
+  noticed, because a missing image and a wrong image both just score badly. Linting the packages
+  against a real consumer is what found it
 - **`letter-spacing`**, at 80% of blocks, still ignored by the engine and still only reported
 - repeating gradients → hard stops
 - animated `left`/`top` → `transform`

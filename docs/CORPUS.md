@@ -88,7 +88,7 @@ Measured against **CupriFace 0.26.1** by `conformance/` — see
 | `<canvas>` | **38 — 20%** | drawn by JavaScript. Untranslatable — name it and refuse. |
 | `filter:` | 37 — 19% | **works** — `blur()` and `brightness()` both paint |
 | `display: grid` | 27 — 14% | **works** |
-| `<img>` | 23 — 12% | becomes `<cupri-image>` |
+| `<img>` | 23 — 12% | becomes `<cupri-image>`, with `object-fit` carried across as the component's `fit`. **This row claimed the rewrite existed for weeks before it did** — see docs/TRANSLATION.md. |
 | `@font-face` | 16 — 8% | **works**, `data:` URIs included — but only as of **0.28.1** for the `.woff2` every one of them carries, through the optional `CupriFace.Woff2` package and a `UseWoff2()` call. Refused by name before that, and the text drew in a substitute. |
 | `backdrop-filter` | 12 — 6% | **NOT rendered** |
 | `mix-blend-mode` | 11 — 5% | **NOT rendered** |

@@ -83,12 +83,12 @@ On CupriFace 0.28.1, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
 | | |
 |---|---|
 | blocks scored | **185 of 187** |
-| **mean of content** | **38.3%** — the number to beat |
+| **mean of content** | **40.8%** — the number to beat |
 | median | 40.0% |
 | mean of frame | 67.0% |
 | where it is wrong, off by | 33.0% of full scale |
-| blocks that render one still frame | 140 of 185 |
-| **blocks the engine paints almost nothing in** | **84 of 185** |
+| blocks that render one still frame | 136 of 185 |
+| **blocks the engine paints almost nothing in** | **79 of 185** |
 
 That last row is the constraint, and it was not visible until it was measured. Nearly half the
 corpus renders under 0.5% of its own frame — the composition is built or painted by the JavaScript

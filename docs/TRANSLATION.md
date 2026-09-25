@@ -53,7 +53,7 @@ one — the comparison harness is what should decide it. See [COMPILER.md](COMPI
 
 | from | to | why |
 |---|---|---|
-| `<img src>` | `<cupri-image src>` | the engine has no raw `<img>`; it lays out and stays empty (`CF0030`) |
+| `<img src>` | `<cupri-image src>` | the engine has no raw `<img>`; it lays out and stays empty (`CF0030`). **This table said so for weeks before any code did it** — the claim was found by linting the packages, which reported 20 of 187 still shipping a raw `<img>`. Worth 2.5 points on the corpus when it was finally written. |
 | `repeating-linear-gradient(...)` | one gradient with hard stops | not painted. 2% of blocks. |
 | animated `left` / `top` | `transform: translate()` | accepted, runs, changes nothing |
 | external font `@import` / `<link>` | download, embed as `@font-face` with a `data:` URI | 23% of blocks. Keeps the result one self-contained file. |

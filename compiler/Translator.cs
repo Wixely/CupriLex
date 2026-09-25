@@ -42,6 +42,11 @@ public static class Translator
         var refusals = sheet.Refusals.ToList();
 
         Descript(output, refusals);
+
+        // Before the URLs are touched, so a src is rewritten once and on the element that will
+        // carry it. The engine draws no raw <img> at all - it lays one out and leaves it empty -
+        // and 20 of the corpus's packages were shipping exactly that.
+        refusals.AddRange(Images.Rewrite(output));
         if (directory is { Length: > 0 }) Rebase(output, directory);
         Style(output, sheet.Css);
 

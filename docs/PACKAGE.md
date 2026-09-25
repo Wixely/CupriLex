@@ -86,7 +86,7 @@ can answer, it is flagged as data rather than resolved:
 
 ```json
 {
-  "block": "code-snippet-visual-studio-light",
+  "block": "code-snippet-dark-2026",
   "fonts": [
     { "stack": "Menlo, Monaco, Consolas, \"Courier New\", monospace",
       "wanted": ["Menlo", "Monaco", "Consolas", "Courier New"],

@@ -118,9 +118,11 @@ public static class Corpus
             + "only shape of failure where colour and geometry fidelity can show up at all: this "
             + "one draws the WRONG thing rather than nothing"),
 
-        ("code-snippet-visual-studio-light",
-            "80% content over dense text, no engine motion. The high-water mark: anything that "
-            + "breaks text layout or rasterisation drops this before it shows anywhere else"),
+        ("code-snippet-dark-2026",
+            "78% content over dense text, no engine motion. The high-water mark: anything that "
+            + "breaks text layout or rasterisation drops this before it shows anywhere else. It "
+            + "replaced code-snippet-visual-studio-light, which upstream deleted - the test that "
+            + "holds this list against the corpus is what noticed, on CI, on its first run"),
 
         ("world-map",
             "the <svg> canary at 77%. Inline SVG needs an optional package and a UseSvg() call, "

@@ -78,25 +78,34 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.28.1, over 187 blocks — see [docs/HARNESS.md](docs/HARNESS.md):
+On CupriFace 0.28.1, over the corpus as it stood on **25 September 2026** — see
+[docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
-| blocks scored | **185 of 187** |
-| **mean of content** | **40.8%** — the number to beat |
+| blocks scored | **168 of 172** |
+| **mean of content** | **37.1%** — the number to beat |
 | median | 40.0% |
-| mean of frame | 67.0% |
-| where it is wrong, off by | 33.0% of full scale |
-| blocks that render one still frame | 136 of 185 |
-| **blocks the engine paints almost nothing in** | **79 of 185** |
+| mean of frame | 72.4% |
+| where it is wrong, off by | 30.6% of full scale |
+| blocks that render one still frame | 119 of 168 |
+| **blocks the engine paints almost nothing in** | **85 of 168** |
 
-That last row is the constraint, and it was not visible until it was measured. Nearly half the
-corpus renders under 0.5% of its own frame — the composition is built or painted by the JavaScript
-that had to be removed — so those blocks cannot be improved by fidelity work of any kind. Four
-correct fixes in a row moved the mean by nothing for this reason: a timeline cursor, an easing
-parameter, a WOFF 2 font decoder that changed the pixels of exactly **3 of 185** blocks, and
-reading start values out of the stylesheet, which turned 50 stills into animations and left the
-mean where it was.
+**The date is part of the number.** The corpus is fetched rather than vendored, deliberately, so
+that the survey describes what is actually there — and upstream moves. Between two measurements a
+day apart it lost 24 blocks and gained 9, and the mean fell from 40.8% to 37.1% without a line of
+this repository changing: the blocks that went were the dense-text ones scoring 70–99%. A number
+here is only comparable to another taken against the same fetch.
+
+That last row is the constraint, and it was not visible until it was measured. Half the corpus
+renders under 0.5% of its own frame — the composition is built or painted by the JavaScript that
+had to be removed — so those blocks cannot be improved by fidelity work of any kind. Four correct
+fixes in a row moved the mean by nothing for this reason: a timeline cursor, an easing parameter, a
+WOFF 2 font decoder that changed the pixels of exactly three blocks, and reading start values out
+of the stylesheet, which turned 50 stills into animations and left the mean where it was.
+
+The one that did move it was drawing the images, worth 2.5 points, and it had been documented as
+done for weeks while no code did it.
 
 **Read the content number, not the frame number.** They differ by 29 points because these
 compositions paint on a small share of a large frame, so counting the empty background rewards a

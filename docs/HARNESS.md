@@ -296,7 +296,7 @@ nine canaries say which mechanism moved where nine random blocks would only say 
 | `notes-reveal` | typography — the best-scoring block that both animates and paints text |
 | `heygen-avatar-promo-card` | typography, portrait — the block the WOFF 2 decoder helped most |
 | `mk-clone-wall-transition` | fidelity — paints 91% of its frame and scores 23%: wrong, not missing |
-| `code-snippet-visual-studio-light` | text layout — 80% over dense text, the high-water mark |
+| `code-snippet-dark-2026` | text layout — 78% over dense text, the high-water mark |
 | `world-map` | inline `<svg>`, which needs an optional package and a call to enable it |
 | `transitions-mechanical` | compiler reach — 28 refusals, and a quarter of the frame moving |
 | `chatgpt-exchange` | the 93 that paint nothing, so the fast set cannot flatter itself |
@@ -306,7 +306,11 @@ alive: the fast set reads 45.7% of content where the corpus reads 38.2%. The run
 warning itself. Quote `--all` in anything that is written down; use `--fast` to decide whether
 `--all` is worth the forty minutes.
 
-A block here that joins the 93 painting nothing has stopped being a canary and should be replaced.
+A block here that joins the ones painting nothing has stopped being a canary and should be
+replaced. **So has one that upstream deletes.** `code-snippet-visual-studio-light` was the
+text-layout canary until the corpus lost it, along with 23 other blocks, between two fetches a day
+apart. `CorpusTests.Every_block_in_the_fast_set_still_exists` is what noticed — on CI, on its first
+run, against a freshly fetched corpus that this machine's stale copy would never have shown.
 
 Needs the corpus (`python tools/fetch-corpus.py`), a browser — Edge or Chrome, or
 `CUPRILEX_BROWSER` pointing at one — and the network, because every block loads GSAP from a CDN.

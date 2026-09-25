@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net.WebSockets;
 using System.Text;
@@ -476,11 +476,29 @@ public sealed class Browser : IAsyncDisposable
         {
             if (File.Exists(path))
             {
-                // Opened shared, because the browser still holds the file.
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var reader = new StreamReader(stream);
-                if (int.TryParse((await reader.ReadLineAsync(cancel))?.Trim(), out var port) && port > 0)
-                    return port;
+                try
+                {
+                    // Opened shared, because the browser still holds the file - and even so the
+                    // open can fail. Edge writes this file with EXCLUSIVE access for the instant
+                    // it takes, so asking at the wrong moment is an IOException about a file that
+                    // is about to be perfectly readable. That is a wait, not a failure, and this
+                    // is already a wait loop.
+                    //
+                    // It cost the first CI run two of its three failures: on a slower disk the
+                    // window is wide enough to hit almost every time, where locally it showed up
+                    // about once in ten runs and looked like a flake.
+                    using var stream = new FileStream(
+                        path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    using var reader = new StreamReader(stream);
+
+                    if (int.TryParse((await reader.ReadLineAsync(cancel))?.Trim(), out var port)
+                        && port > 0)
+                        return port;
+                }
+                catch (IOException)
+                {
+                    // Still being written. Ask again after the delay below.
+                }
             }
 
             await Task.Delay(100, cancel);

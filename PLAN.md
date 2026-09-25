@@ -126,7 +126,7 @@ linear — eight samples, chosen arbitrarily and still owed a measurement.
 |---|---|---|
 | blocks scored | 150 of 187 | **183 of 187** |
 | mean of frame, over blocks whose reference moves | 55.2% | 62.8% |
-| **mean of content** (the measure that replaced it) | — | **38.2%** on 0.28.1 |
+| **mean of content** (the measure that replaced it) | — | **37.1%** on 0.28.1, on the corpus as it stood on 25 Sep 2026 |
 | blocks rendering one still frame | **150 of 150** | 145 of 183 |
 
 38 blocks now animate and 33 more can be loaded at all. The mean is not a like-for-like

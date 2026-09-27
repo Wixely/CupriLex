@@ -66,11 +66,18 @@ would otherwise learn the hard way.
 
 ### 1. The corpus — `tools/`, `corpus/`
 
-187 real, designed, animated compositions. Not vendored: `python tools/fetch-corpus.py` pulls
-them, `corpus/` is ignored. They are the test set, and the only honest measure of progress is
-**what fraction of them render correctly**, not how many rewrite rules exist.
+Real, designed, animated compositions. Not vendored: `python tools/fetch-corpus.py` pulls them,
+`corpus/` is ignored. They are the test set, and the only honest measure of progress is **what
+fraction of them render correctly**, not how many rewrite rules exist.
 
-Run `python tools/survey.py` after any corpus refresh. If the numbers move, the plan may need to.
+**Pinned to a commit, not to `main`.** A fetch takes the hash in `fetch-corpus.py`, so two
+measurements are comparable. It was a branch until CI caught what that costs: two fetches a day
+apart differed by 24 blocks removed and 9 added, and the mean fell 3.7 points with no code change.
+`--ref main` fetches what upstream has right now; `--check` says whether the pin has aged, which
+is also a weekly CI job that opens an issue.
+
+Moving the pin is deliberate, and the new hash is committed **with the numbers it produced**. Run
+`python tools/survey.py` after any corpus refresh. If the numbers move, the plan may need to.
 
 ### 2. Conformance — `conformance/`
 

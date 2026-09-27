@@ -1,4 +1,4 @@
-#
+﻿#
 # CupriLex CI.
 #
 # This repository had none until the day it published a package, which is a worse order than it
@@ -16,6 +16,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+  # For the corpus-drift job. The corpus is pinned to a commit so that two measurements are
+  # comparable; the cost is that the pin ages, and this is what notices.
+  schedule:
+    - cron: "17 6 * * 1"
+
 
 env:
   DOTNET_NOLOGO: "true"
@@ -51,6 +57,10 @@ jobs:
       # The corpus is somebody else's work and is not vendored. Fetching it here is what makes the
       # corpus-shaped tests mean anything; without it they skip and the suite reports green on
       # about a dozen fewer assertions than it looks like it ran.
+      #
+      # At the PINNED commit, so this job measures the same corpus the numbers in the docs
+      # describe. Without the pin, a CI run could fail because upstream changed overnight - which
+      # is exactly what happened on the first run of this workflow.
       - name: Fetch the corpus
         run: python tools/fetch-corpus.py
 
@@ -126,3 +136,73 @@ jobs:
           --source GitHub-Wixely-Packages
           --api-key ${{ secrets.GITHUB_TOKEN }}
           --skip-duplicate
+
+  # ---------------------------------------------------------------------------------------------
+  # Has upstream moved away from the pin?
+  #
+  # A pinned corpus is reproducible and goes stale, and the failure mode of stale is silence: the
+  # numbers keep agreeing with each other and stop describing anything. This asks once a week and
+  # says so in an issue, which is the difference between choosing when to move the pin and
+  # finding out by accident.
+  #
+  # It never fails the build. Upstream changing is news, not a defect.
+  corpus-drift:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        name: Compare the pin against upstream main
+        shell: bash
+        run: |
+          if python tools/fetch-corpus.py --check; then
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "drifted=true" >> "$GITHUB_OUTPUT"
+            echo "pin=$(python tools/fetch-corpus.py --print-pin)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Say so, once
+        if: steps.check.outputs.drifted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIN: ${{ steps.check.outputs.pin }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="The corpus pin has drifted from upstream"
+
+          # One issue, not one a week. A reminder that arrives every Monday is a reminder nobody
+          # reads by the third Monday.
+          open=$(gh issue list --state open --search "$title in:title" --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "already open, saying nothing"
+            exit 0
+          fi
+
+          # Written with a QUOTED heredoc so nothing in it is expanded, then the one value that
+          # should be is substituted. An unquoted heredoc would run the backticks.
+          cat > body.md <<'BODY'
+          `tools/fetch-corpus.py` pins the HyperFrames corpus to `PIN_GOES_HERE`, and upstream
+          `main` has moved on.
+
+          That is not a problem by itself. The pin exists so that two measurements are comparable,
+          and the numbers in the docs describe the pinned corpus rather than whatever upstream has
+          today. This is here so the gap is a decision rather than a surprise.
+
+          To move it: set `PIN` in `tools/fetch-corpus.py`, re-fetch with `--force`, run
+          `dotnet run --project harness -- --all`, and commit the new hash **together with the
+          numbers it produced**. They belong in one diff.
+
+          Last time the corpus moved it lost 24 blocks and gained 9, and the mean fell 3.7 points
+          with no code change. So expect the numbers to move, and expect that to mean nothing
+          about the compiler.
+          BODY
+
+          sed -i "s/PIN_GOES_HERE/$PIN/" body.md
+          gh issue create --title "$title" --body-file body.md

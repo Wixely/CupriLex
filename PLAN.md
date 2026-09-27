@@ -290,7 +290,7 @@ time. That is a decision about honesty rather than about fonts.
 | | |
 |---|---|
 | **Its own repository** | The sibling plan said start it inside CupriCut as `Services/Lex/` and extract later, when there was a corpus worth regression-testing and a second consumer. There is a corpus of 187 now, on day one, and it is large enough to steer the design — so the tight loop argument no longer holds and a repository boundary costs less than the coupling would. |
-| **The corpus is not vendored** | Somebody else's work, under Apache 2.0, that changes. Fetched on demand so the survey always describes what is actually there. |
+| **The corpus is not vendored, and is PINNED** | Somebody else's work under Apache 2.0, fetched on demand rather than committed here. Amended 27 Sep 2026: it is pinned to a commit rather than to `main`. The original wording said "so the survey always describes what is actually there", and the cost of that went unstated until CI found it — two fetches a day apart differed by 24 blocks removed and 9 added, and the corpus mean fell 3.7 points with no code change. A number measured against a branch is comparable to nothing. The pin ages instead, which is a failure mode that can be watched: `corpus-drift` asks upstream once a week and opens an issue. Moving it is a deliberate act, and the new hash is committed **with the numbers it produced**. |
 | **Static analysis, never execution** | No JS runtime, not even a sandboxed one. Refusing a block is an acceptable outcome; rendering it wrongly is not. |
 | **Translate once, not at render time** | Output is a `.cutpkg`. Nothing depends on this tool to render. |
 | **The report is a deliverable** | Not a log. An empty report means perfect or lying. |

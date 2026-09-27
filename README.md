@@ -78,8 +78,9 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.28.1, over the corpus as it stood on **25 September 2026** — see
-[docs/HARNESS.md](docs/HARNESS.md):
+On CupriFace 0.28.1, over the corpus pinned at
+[`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824)
+— see [docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
@@ -91,11 +92,12 @@ On CupriFace 0.28.1, over the corpus as it stood on **25 September 2026** — se
 | blocks that render one still frame | 119 of 168 |
 | **blocks the engine paints almost nothing in** | **85 of 168** |
 
-**The date is part of the number.** The corpus is fetched rather than vendored, deliberately, so
-that the survey describes what is actually there — and upstream moves. Between two measurements a
-day apart it lost 24 blocks and gained 9, and the mean fell from 40.8% to 37.1% without a line of
-this repository changing: the blocks that went were the dense-text ones scoring 70–99%. A number
-here is only comparable to another taken against the same fetch.
+**The commit is part of the number.** The corpus is somebody else's work, fetched rather than
+vendored — and it used to be fetched from `main`, so every measurement took whatever upstream
+happened to be that day. Two fetches a day apart differed by 24 blocks removed and 9 added, and the
+mean fell from 40.8% to 37.1% without a line of this repository changing: the blocks that went were
+the dense-text ones scoring 70–99%. It is pinned now, so these numbers can be reproduced and the
+next ones can be compared to them. CI asks upstream weekly whether the pin has aged.
 
 That last row is the constraint, and it was not visible until it was measured. Half the corpus
 renders under 0.5% of its own frame — the composition is built or painted by the JavaScript that

@@ -131,7 +131,8 @@ public static class Program
 
             if (fast) Canaries();
 
-            return await RunAsync(blocks, samples, output, keepFrames, gallery, fast);
+            return await RunAsync(blocks, samples, output, keepFrames, gallery, fast,
+                Option(args, "--download"));
         }
         catch (Exception ex)
         {
@@ -366,16 +367,26 @@ public static class Program
 
     private static async Task<int> RunAsync(
         IReadOnlyList<Block> blocks, int samples, string output, bool keepFrames, bool gallery,
-        bool fast = false)
+        bool fast = false, string? download = null)
     {
         var fonts = Engine.FindFonts();
         Directory.CreateDirectory(output);
+
+        // The faces a block links from a font service, fetched the way the packager fetches them
+        // and only with the same consent. Off by default, so a number is comparable with every
+        // number before it; on, the engine is scored in the typeface the browser used.
+        var consent = WebFaces.Allowed(download);
+        using var http = new Http();
+        var fetch = new CachedFetch(http, Path.Combine(output, "font-cache"));
 
         await using var browser = await Browser.LaunchAsync();
 
         Console.WriteLine($"engine   CupriFace {Engine.Version}");
         Console.WriteLine($"browser  {browser.Version}");
         Console.WriteLine($"fonts    {fonts ?? "(none found - text will be scored against whatever is installed)"}");
+        Console.WriteLine($"web      {(download is { Length: > 0 } && consent != Consent.None
+            ? $"faces a block links are fetched and embedded (--download {download})"
+            : "faces a block links are NOT fetched; text is scored in the registered faces (--download all to change that)")}");
         Console.WriteLine($"blocks   {blocks.Count}, {samples} samples each");
         Console.WriteLine();
 
@@ -389,7 +400,8 @@ public static class Program
 
         foreach (var block in blocks)
         {
-            var score = await ScoreAsync(browser, block, samples, output, keepFrames, fonts);
+            var score = await ScoreAsync(browser, block, samples, output, keepFrames, fonts,
+                consent, fetch);
             scores.Add(score);
 
             await File.AppendAllTextAsync(incremental,
@@ -448,7 +460,7 @@ public static class Program
     // ---- one block ----------------------------------------------------------------------------
 
     private static async Task<Score> ScoreAsync(Browser browser, Block block, int samples,
-        string output, bool keepFrames, string? fonts)
+        string output, bool keepFrames, string? fonts, IConsent consent, IFetch fetch)
     {
         // Sorted here, once. Both renderers return frames in ascending time order, so an unsorted
         // list would pair frame i with a label that belongs to a different instant - and every
@@ -472,11 +484,12 @@ public static class Program
         }
 
         var translated = Translation.Of(block);
+        var (html, faces) = await WebFaces.EmbedAsync(translated.Html, consent, fetch);
 
         Rendered rendered;
         try
         {
-            rendered = Engine.Render(block, translated.Html, times, fonts);
+            rendered = Engine.Render(block, html, times, fonts);
         }
         catch (Exception ex)
         {
@@ -539,7 +552,7 @@ public static class Program
             Math.Round(reference.Frames.Average(f => f.Ink()), 5),
             Math.Round(rendered.Frames.Average(f => f.Ink()), 5),
             Math.Round(clock.Elapsed.TotalSeconds, 2),
-            comparisons, translated.Refusals, rendered.Diagnostics, null);
+            comparisons, translated.Refusals, [.. faces, .. rendered.Diagnostics], null);
     }
 
     /// <summary>
@@ -777,9 +790,12 @@ public static class Program
                 --report FILE  re-summarise a finished run's baseline.json, rendering nothing
                 --package DIR  write each block as a .cutpkg and render nothing: one file with
                                its assets, its fonts and its report inside
-                --download W   what may be fetched off this machine while packaging:
-                               "all", "none" (the default), or omit it to be shown
-                               every request and asked
+                --download W   what may be fetched off this machine: "all", "none" (the
+                               default), or a list of hosts. While packaging, omit it to be
+                               shown every request and asked. While scoring, the faces a
+                               block links from a font service are fetched and embedded, so
+                               the engine is scored in the typeface the browser used; a run
+                               without it is scored in the registered faces, as before
 
             Needs the corpus: python tools/fetch-corpus.py
             """);

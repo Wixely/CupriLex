@@ -208,6 +208,49 @@ previously could not be loaded at all are now in the population, and they score 
 
 ---
 
+## What dissecting one block found
+
+Every number above is an average, and an average says how big a problem is without saying what it
+is. On 5 October 2026 one block was taken apart instead: `x-post`, a 1920×1080 card that slides in
+from below, gets "liked", and slides out. The compiler carries nearly all of its motion, and it
+scored **40.0% of content** - perfect at t=0 and t=5, where both sides are blank, and 0% at every
+sample in between.
+
+The method was to render hand-edited variants of the translated document through the engine and
+score each against the browser frames the harness had kept, so every suspected cause got a number
+rather than an opinion:
+
+| the translated document, with… | mid-frame content wrong |
+|---|---|
+| nothing changed | **100%** |
+| the card's `translateX(-50%)` written as `-440px` and the root given its size | 17.6% |
+| …and Inter embedded as a `data:` face | 14.8% |
+| …and the heart emulated at its liked state | 14.7% |
+
+Two engine behaviours accounted for 82 of the 100 points: a percentage translate was ignored, and
+`top: 50%` against an unsized static parent was 0, so the card was drawn at (960, 0) instead of
+(520, 540). The typeface was worth three more. What is left is glyph rasterisation - off by 17%,
+severe 0.3% - which is the floor the text-heavy blocks already sit at. Both were worked around in
+the translator the same day and the block read **89.4%** through this harness, which is what the
+table predicted; the workarounds were worth 3.2 points on the corpus.
+
+Four more behaviours came out on the way with nothing honest to rewrite them to: margins on
+absolute elements were ignored, `::before`/`::after` were never generated, svg children took no
+stylesheet CSS or animation, and a variable font drew every weight the same. The heart that never
+turned pink was the third of those. All six went upstream as CupriFace #258-#263, all six were
+fixed in **0.34.0** the same week, and the two workarounds were deleted on the strength of the
+matrix diff. x-post reads **94.1%** on that engine with no rule in the way, and the heart turns
+pink. See [CONFORMANCE.md](CONFORMANCE.md).
+
+One finding was against the browser's own consistency rather than the engine. GSAP 3.14 keeps an
+authored `translate(-50%, -50%)` as `yPercent: -50` only when the computed matrix matches half the
+element's *integer* `offsetHeight`. `x-post`'s card is 388.89px tall, so the browser itself drops
+the vertical centring once `y` is tweened; `reddit-post`'s is 457.36px and keeps it. Identical CSS
+and script, opposite results, and no static translation can tell them apart. The compiler matches
+`x-post` and not `reddit-post`, which is why the latter stops at 60%.
+
+---
+
 ## Reading a triptych
 
 ![browser, engine, difference](images/harness-bar-chart-race.png)
@@ -226,6 +269,18 @@ that shows the bars never grew.
 **Fonts.** The engine is given CupriCut's shipped faces when that repository is beside this one. A
 document with no registered face is at the mercy of whatever the machine has installed, which makes
 a text-heavy corpus score differently on two machines for no engine reason.
+
+**The faces a block links.** 47 blocks link Google Fonts, and by default they are scored in Noto
+Sans against a browser drawing Inter, DM Sans or Space Mono, with the difference charged to the
+engine. `--download all` fetches those faces the way the packager does - same consent, same
+request list, cached under the output directory - and embeds them as `data:` faces before the
+render, so the engine is scored in the typeface the browser used. Measured on x-post with its card
+already in the right place: 17.7% of content wrong in the substitute, 14.8% in Inter, which is 1.8
+points on the block's score. Over the corpus it is **40.3% to 40.4%**: 45 blocks had a face
+fetched, four improved by one to two points, one lost one, and the mean over those 45 moved from
+53.0% to 53.1%. That is the WOFF 2 finding again - the blocks that link a typeface are mostly the
+blocks that draw little text, or none - and it is why the flag is off by default: a number stays
+comparable with every number before it, and the run header says which way it was run.
 
 **Subpixel antialiasing.** The browser runs with `--disable-lcd-text`. Windows fringes text with
 colour the engine never draws, and it would have been counted as a difference on every letter of
@@ -281,6 +336,8 @@ dotnet run --project harness -- --all       score the corpus, about 40 minutes
   --out DIR      where frames and baseline.json go (default harness/out)
   --frames       keep every sample's images, not only the worst
   --limit N      stop after N blocks, for a quick look
+  --download W   "all", "none" (the default) or a list of hosts: fetch the faces a block
+                 links from a font service and score the engine in them
 ```
 
 ### The fast set

@@ -78,19 +78,36 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.28.1, over the corpus pinned at
+On CupriFace 0.36.0, over the corpus pinned at
 [`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824)
 — see [docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
 | blocks scored | **168 of 172** |
-| **mean of content** | **37.1%** — the number to beat |
-| median | 40.0% |
-| mean of frame | 72.4% |
-| where it is wrong, off by | 30.6% of full scale |
-| blocks that render one still frame | 119 of 168 |
-| **blocks the engine paints almost nothing in** | **85 of 168** |
+| **mean of content** | **44.3%** — the number to beat |
+| median | 40.9% |
+| mean of frame | 75.8% |
+| where it is wrong, off by | 28.5% of full scale |
+| blocks that render one still frame | 105 of 168 |
+| **blocks the engine paints almost nothing in** | **76 of 168** |
+
+Measured 6 October 2026, with the faces a block links from a font service *not* fetched, so it is
+comparable with every number before it. On the same pin, in order:
+
+| | mean of content | what changed |
+|---|---|---|
+| 0.28.1 | 37.1% | |
+| 0.28.1 | 40.3% | two translator workarounds for engine gaps found by dissecting one block |
+| 0.34.0 | 43.5% | the engine fixed six of those gaps; both workarounds deleted |
+| 0.35.0 | 43.5% | six more gaps fixed, and a tiled-gradient regression that cancelled them |
+| **0.36.0** | **44.3%** | the regression fixed, and the older bug under it |
+
+Three engine releases in two days, thirteen issues raised from this repository's measurements and
+all thirteen fixed. The last two rows are the mechanism earning its keep: 0.35.0's six fixes moved
+the mean by **nothing** because a regression arrived with them, the corpus run said so the same
+day, and the fix for it was worth 0.8 points plus everything 0.35.0 had been owed. See
+[docs/CONFORMANCE.md](docs/CONFORMANCE.md).
 
 **The commit is part of the number.** The corpus is somebody else's work, fetched rather than
 vendored — and it used to be fetched from `main`, so every measurement took whatever upstream
@@ -106,8 +123,17 @@ fixes in a row moved the mean by nothing for this reason: a timeline cursor, an 
 WOFF 2 font decoder that changed the pixels of exactly three blocks, and reading start values out
 of the stylesheet, which turned 50 stills into animations and left the mean where it was.
 
-The one that did move it was drawing the images, worth 2.5 points, and it had been documented as
-done for weeks while no code did it.
+The first one that did move it was drawing the images, worth 2.5 points, and it had been
+documented as done for weeks while no code did it.
+
+The second came from taking one block apart instead of surveying all of them. `x-post` had its
+motion compiled correctly and scored 40%, because the engine ignored a percentage `translate()`
+and positioned an absolute child against an unsized parent's own box, so a centred card was drawn
+at the top-right corner. Two workarounds were worth 3.2 points and 18 blocks with none worse; the
+six engine behaviours the dissection surfaced went upstream as CupriFace #258-#263, were fixed in
+0.34.0 within the week, and the workarounds were deleted on the strength of the matrix diff. The
+third gain, below, is that engine release. See [docs/HARNESS.md](docs/HARNESS.md), "What
+dissecting one block found".
 
 **Read the content number, not the frame number.** They differ by 29 points because these
 compositions paint on a small share of a large frame, so counting the empty background rewards a

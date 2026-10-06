@@ -62,6 +62,37 @@ one — the comparison harness is what should decide it. See [COMPILER.md](COMPI
 
 | relative asset paths | absolute, then embedded as bytes | the engine is handed a string, which has no document location to resolve against |
 
+### Two more that came and went in a day
+
+Both came out of dissecting one block rather than surveying the corpus. `x-post` is a card that
+slides in, gets "liked", and slides out; the compiler carried its motion correctly and it scored
+**40.0% of content** on 0.28.1, zero at every mid-composition frame, because the engine drew the
+card at the top-right corner instead of the centre. Two engine behaviours put it there: a
+percentage `translate()` was ignored outright, and an absolute child of an unsized static parent
+was positioned against that parent's own zero-height box rather than the viewport.
+
+Both were worked around on 5 October 2026 - the percentage written in px where the border box was
+declared, the root given its `data-width` × `data-height` - and measured: **37.1% → 40.3% on the
+corpus, 18 blocks better and none worse**, the largest single gain the corpus had had. Both were
+reported upstream the same day (#258, #259), fixed in **CupriFace 0.34.0**, and deleted here on
+the day the matrix said so. `EngineGapTests` carries the two questions flipped, as
+`EngineBugTests` does for the earlier three, so a regression is a red test rather than a corpus
+run away.
+
+The dissection surfaced four more behaviours that had nothing honest to rewrite them to - margins
+on absolutely positioned elements, `::before`/`::after`, the cascade reaching into an `<svg>`, and
+a variable font's weight - and 0.34.0 fixed those as well (#260-#263). One of them had a
+consequence on this side: once the engine honoured stylesheets inside an svg, the compiler's
+failure to read `<path opacity="0">` turned an inert flat animation into a pink heart from frame
+zero, so the cascade reader now reads a presentation attribute at the bottom of the cascade, where
+the SVG specification puts it.
+
+One finding was against the browser rather than the engine, and it stays. GSAP 3.14 keeps an
+authored `translate(-50%, -50%)` as `yPercent: -50` only when the computed matrix matches half the
+element's *integer* `offsetHeight`; `x-post`'s card is 388.89px tall and loses its vertical
+centring once `y` is tweened, `reddit-post`'s is 457.36px and keeps it, from identical CSS and
+script. No static translation can tell those apart, and the compiler matches `x-post`.
+
 ### The four the comparison harness found, and what became of them
 
 None came from reading a spec. They came from running [the harness](HARNESS.md) over the corpus and
@@ -76,6 +107,7 @@ so the rules that worked around them have been **deleted**, which is the outcome
 | `backdrop-filter`, 3D transforms and repeating gradients were accepted in silence and painted nothing | nothing to do but report | **0.27.0** reports them (#201); still not painted |
 | every face in the corpus is a `.woff2`, refused by name, so **157 blocks** drew their text in a substitute | nothing to do but report | fixed in **0.28.1** (#209), through the optional `CupriFace.Woff2` package and a `UseWoff2()` call |
 | **13 blocks** hold their whole composition in a `<template>`, inert until a host clones it in | inlined | **still needed** — not an engine gap; template content is inert by specification |
+| a percentage `translate()` ignored, and an absolute child positioned against an unsized static parent's own box — found by dissecting `x-post`, worth **3.2 points** on the corpus | rewritten to px, and the root sized | fixed in **0.34.0** (#258, #259), with four more from the same dissection (#260-#263); rules deleted the same week they were written |
 
 The one rewrite left is the last row. The other three lines are the reason the conformance matrix
 is committed per version: `git diff conformance/support/` between two releases is the list of rules

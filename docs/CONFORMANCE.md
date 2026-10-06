@@ -126,6 +126,170 @@ switched the process on.
 
 ---
 
+## What it produced the third time, which was the lesson of the second time applied
+
+The second run said "nothing moved" because the matrix had no question about fonts. The third
+addition came from the other direction: not a release, but one block taken apart to see why a
+correct translation scored 40%. Six engine behaviours fell out, and **none of them was a property
+the corpus survey could have flagged**. They are the ordinary CSS *around* the properties -
+a percentage in a translate, the containing block of an absolute child, a margin on one, a
+pseudo-element, the cascade reaching into an svg, the weight axis of a variable face - which is
+exactly the kind of question a property-by-property matrix never asks.
+
+```
+transform            translateX(-50%)               yes   NO    NO
+top                  50% in an unsized static parent yes   NO    -
+top                  50% in a sized static parent    yes   yes   -
+margin-left          80px, on position:absolute      yes   NO    -
+::after              content:'' with a size and a …  yes   NO    -
+::before             content:'' with a size and a …  yes   NO    -
+<svg> child          stylesheet opacity:0 on a rect  yes   NO    NO
+<svg>                stylesheet opacity:0 on the r…  yes   yes   yes
+<svg> child          opacity="0" attribute on a re…  yes   yes   -
+@font-face           variable wght axis, 700 vs 400  yes   NO    -
+```
+
+Three of the rows are controls, and they are the ones that make the other seven mean something:
+`top: 50%` works in a sized parent, so the failure is the containing block and not the percentage;
+the svg root takes the stylesheet, so the failure is the cascade reaching the children and not svg
+styling; the attribute is honoured, so there is a path the engine does read. Reported as CupriFace
+#258 to #263 on the day they were measured, with two of the seven worked around in the translator
+by rules that declared the row they would be deleted on.
+
+That was 0.34.0, released the same week, and the diff is the cleanest this file has produced:
+
+```
+dotnet run --project conformance -- --compare conformance/support/0.28.1.json conformance/support/0.34.0.json
+
+  transform (translateX(-50%)) paints: NO -> yes
+  transform (translateX(-50%)) animates: NO -> yes
+  top (50% in an unsized static parent) paints: NO -> yes
+  margin-left (80px, on position:absolute) paints: NO -> yes
+  ::after (content:'' with a size and a background) paints: NO -> yes
+  ::before (content:'' with a size and a background) paints: NO -> yes
+  <svg> child (stylesheet opacity:0 on a rect) paints: NO -> yes
+  <svg> child (stylesheet opacity:0 on a rect) animates: NO -> yes
+  @font-face (variable wght axis, 700 vs 400) paints: NO -> yes
+
+9 change(s).
+```
+
+Nine changes, all in the direction asked, and nothing else moved across 49 other rows - which was
+checked before the branch merged, by packing it locally and running this file against it. Both
+translator rules were deleted on the strength of those lines, and the tests that pinned them were
+flipped. One caution the matrix cannot express: the weight row reads `yes` because 700 now differs
+from 400, and it would read the same for a synthesised bold as for a real instance of the axis.
+0.34.0 synthesises, because the SkiaSharp it builds against has no variation API; the row will not
+notice when that changes.
+
+### What the 0.34.0 run ranked next
+
+With those six gone, the engine's own diagnostics over the corpus and the blocks that paint more
+than the browser does were used to choose eleven more rows, so the next report could quote a row
+rather than a count of `CF0050` lines. Six read yes and are no issue: svg `<text>`, a gradient
+fill by reference, `stroke-dashoffset`, and `overflow: hidden` clipping a translated or a scaled
+child. Five read NO on 0.34.0:
+
+```
+text-transform       uppercase                      NO    NO    -      52 blocks write it
+background-size      50% 100% on a gradient         NO    NO    -      25 blocks
+background           gradient + no-repeat, shorthand yes  NO    -      10 blocks, and SILENT
+clip-path            circle(30%) / polygon(...)     NO    NO    -      40 blocks, with inset()
+backface-visibility  hidden, face rotated 180deg    NO    NO    -      27 blocks; the 3D family
+```
+
+The shorthand row was found by accident: the first draft of the `background-size` case wrote its
+control as `background: linear-gradient(...) no-repeat`, and the control painted nothing. A
+`background` shorthand with any keyword after the image is accepted without a diagnostic and
+paints nothing at all, which is the class of failure #201 was about. The seventeen `CF0030` lines
+saying an `<svg>` "is not something the engine draws" are not an svg gap: every one of those
+elements is empty in the markup and filled by the JavaScript that was removed, and the doctor's
+advice to add a package that is already in use is the misleading part.
+
+Reported upstream as CupriFace #265 (the silent shorthand), #266 (`text-transform`), #267
+(`background-size`), #268 (`clip-path`), #269 (the 3D family as one issue) and #270 (the doctor's
+advice), each quoting its row.
+
+### 0.35.0, which answered all six and three older rows with them
+
+```
+dotnet run --project conformance -- --compare conformance/support/0.34.0.json conformance/support/0.35.0.json
+
+  clip-path (inset(0 40% 0 0)) parses: NO -> yes            paints: NO -> yes
+  transform (rotateY(50deg)) paints: NO -> yes
+  transform (translate3d(60px,20px,0)) paints: NO -> yes
+  perspective (400px) parses: NO -> yes
+  text-transform (uppercase) parses: NO -> yes               paints: NO -> yes
+  background-size (50% 100% on a gradient) parses: NO -> yes paints: NO -> yes
+  background (gradient + no-repeat, shorthand) paints: NO -> yes
+  clip-path (circle(30%)) parses: NO -> yes                  paints: NO -> yes
+  clip-path (polygon(...)) parses: NO -> yes                 paints: NO -> yes
+  backface-visibility (hidden, face rotated 180deg) parses: NO -> yes   paints: NO -> yes
+
+16 change(s).
+```
+
+The `inset()` row had been NO since 0.26.1 and the two 3D rows since #201; they went with the
+family. Nothing else moved. Four rows were added on the same day to ask the question the compiler
+needs next - not whether a property paints but whether it **animates**, since that decides whether
+refusing its tween is still honest:
+
+```
+clip-path            inset() animated, wipe         yes   yes   yes
+transform            rotateY animated               yes   yes   yes
+<svg> stroke         stroke-dashoffset animated     yes   yes   yes
+filter               blur animated                  yes   yes   NO
+```
+
+Three of those are compiler work waiting to happen: `clipPath` is 89 refused tweens across 16
+blocks, `strokeDashoffset` 32 across 10, `rotationY` 24 across 3. `filter`, at 166 tweens across
+16 blocks, stays refused and the refusal is still true.
+
+One regression came with the release, and it is the honest kind: a property that now paints,
+painting wrongly. `notes-reveal` fell from 86.4% to 82.0% on its last frame alone, where the
+paper's dot grid - `radial-gradient(circle, rgba(…) 2px, transparent 2.6px)` tiled at `36px 36px`
+- draws each tile mostly dark. Measured directly: a 1.5px dot on a 36px tile covers **38.6%** of
+the box, and the same share at 3px and at a 120px tile, where CSS would give 0.5%, 2.2% and 0.2%.
+The gradient's stops are not being resolved against the tile. The same tile idiom draws the
+1px grid lines behind every `code-*` block (`linear-gradient(rgba(…) 1px, transparent 1px)` at
+`64px 64px`), and those five blocks each fell 12 points, from 76-86% to 65-74%. Over the corpus
+the release moved the mean by nothing: 43.5% to 43.5%, 10 blocks better and 13 worse, the gains
+(`split-flap-board` 0% to 74%, the `lt-*` family a few points each) cancelled by the tile.
+Reported as CupriFace #273, with the three measurements.
+
+### 0.36.0, the next day
+
+#273 turned out to be older than 0.35.0: a gradient stop placed in **px** had never been read at
+all, only a `%` one, so every hairline and dot pattern in the corpus had been a fade across its
+gradient box since the beginning - invisible while that box was the element, and a field of blobs
+once 0.35.0 tiled it. 0.36.0 reads the px and divides it by the gradient line over the box the
+gradient fills, which under `background-size` is the tile.
+
+The matrix could not have caught it, because no row asked, and a paints/does-not-paint row cannot
+ask "is this the *right* picture". The row added for it is written like the rgba-versus-hex pair:
+a 1px stop against a 0.5% stop on a 200px line, two documents that *should* render the same, so
+the honest reading is NO:
+
+```
+gradient stop        1px, should match 0.5% of a 200px line   yes   NO    -
+```
+
+Over the corpus: **43.5% to 44.3%, 8 blocks better and 1 worse.** `code-typing` came back from
+73.8% to 85.8%, `notes-reveal` went past where it had ever been (86.4% to 94.0%, its dots now
+drawing rather than fading), and the two `flowchart` blocks roughly doubled, 30.2% to 63.5% and
+33.1% to 59.0% - neither of which anyone had connected to gradients.
+
+That last pair is the argument for measuring a release rather than reading its notes. #273 was
+filed about a dot grid; the fix reached two flowcharts whose connector lines are drawn with
+px-stopped gradients, and nothing in the issue or the release notes would have predicted them.
+
+The weight case needs a variable face, and the corpus has none, so one is kept beside the probe:
+`conformance/fonts/Inter-latin-wght.woff2`, the file Google Fonts actually serves for
+`Inter:wght@400;700` and so the file a package actually carries. The run prints whether it was
+found, because a missing file reads `NO` for the wrong reason, the same way the WOFF 2 case does.
+
+---
+
 ## How a translator uses it
 
 Every rewrite rule declares what it is working around:

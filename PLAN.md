@@ -161,6 +161,15 @@ size**, and **`<template>` inlined**. What is left:
   the one kind of mistake this repository is arranged to catch and did not - the harness never
   noticed, because a missing image and a wrong image both just score badly. Linting the packages
   against a real consumer is what found it
+- ~~a percentage `translate()` → px, and an unsized root → its declared size~~ **Done, and
+  deleted the same week.** Both found by dissecting one block rather than surveying the corpus:
+  `x-post` had its motion compiled correctly and scored 40% because the engine drew the card at
+  the top-right corner. Two engine behaviours, each a conformance row, a workaround that declared
+  the row it would be deleted on, and a test that failed on that day. The rules were worth
+  **37.1% → 40.3% on the corpus, 18 blocks better and none worse**; the six behaviours the
+  dissection surfaced went upstream as CupriFace #258-#263 and all six were fixed in **0.34.0**,
+  on which the rules are gone and the pins are flipped. See [docs/HARNESS.md](docs/HARNESS.md),
+  "What dissecting one block found"
 - **`letter-spacing`**, at 80% of blocks, still ignored by the engine and still only reported
 - repeating gradients → hard stops
 - animated `left`/`top` → `transform`

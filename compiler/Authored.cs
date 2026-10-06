@@ -153,6 +153,16 @@ internal sealed class Authored
     {
         string? opacity = null, transform = null;
 
+        // A presentation attribute on an SVG element - <path opacity="0">, the way every icon in
+        // this corpus hides its second state - is a declaration at the bottom of the cascade, and
+        // that is where the engine puts it too since 0.34.0 (#262). Before that version the engine
+        // read nothing but the attribute, and the compiler read nothing of it: x-post's filled
+        // heart compiled to a flat animation holding opacity 1, inert on an engine that ignored
+        // stylesheets inside an svg and a pink heart from frame zero on one that honours them.
+        // The transform attribute is not read: its grammar is SVG's, not CSS's, and a wrong
+        // reading of it is a wrong start position.
+        if (element.GetAttribute("opacity") is { Length: > 0 } presented) opacity = presented;
+
         var applicable = _rules
             .Select((rule, order) => (rule, order))
             .Where(r => Matches(element, r.rule))

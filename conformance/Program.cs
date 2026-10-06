@@ -49,6 +49,7 @@ public static class Program
         Console.WriteLine($"CupriFace {version} on {Environment.OSVersion.VersionString}");
         Console.WriteLine($"fonts: {Probe.FontDirectory ?? "(none found - text cases may be unreliable)"}");
         Console.WriteLine($"woff2: {(Probe.FontFiles.Count > 0 ? Probe.FontFiles[0] : "(none found - the @font-face case will read NO for the wrong reason)")}");
+        Console.WriteLine($"variable: {Cases.VariablePath ?? "(conformance/fonts/Inter-latin-wght.woff2 not found - the wght axis case will read NO for the wrong reason)"}");
         Console.WriteLine();
 
         var results = Probe.All();

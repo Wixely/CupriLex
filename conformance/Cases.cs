@@ -115,7 +115,15 @@ public static class Cases
                 + ".p{display:block;width:200px;height:80px;}")),
         Added("transform", "rotateY(50deg)", Box, "transform:rotateY(50deg);"),               // 28% use 3D
         Added("transform", "translate3d(60px,20px,0)", Box, "transform:translate3d(60px,20px,0);"),
-        Added("perspective", "400px", Box + "transform:rotateX(45deg);", "perspective:400px;"),
+        // On the PARENT, because that is the element it applies to: a child's rotation is projected
+        // through its parent's perspective, and the property on the rotated element itself does
+        // nothing in a browser either. The first version wrote it there and could only ever read
+        // the parse column.
+        new("perspective", "400px on the parent of a rotateX(45deg) child",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{perspective:400px;width:120px;height:80px;}.p{" + Box + "transform:rotateX(45deg);}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{width:120px;height:80px;}.p{" + Box + "transform:rotateX(45deg);}")),
         Added("box-shadow", "0 10px 30px #000", Box, "box-shadow:0 10px 30px #000;"),
         Added("text-shadow", "0 4px 8px #000", Ink, "text-shadow:0 4px 8px #000;", markup: Text),
         new("gap", "0 -> 24px",
@@ -338,7 +346,250 @@ public static class Cases
             new Doc(Text, FaceRule("DataFace", DataUri) + ".p{font-family:'DataFace';"
                           + "font-size:40px;color:#d9642a;}"),
             new Doc(Text, ".p{font-family:'NoSuchFaceExists';font-size:40px;color:#d9642a;}")),
+
+        // ---- what dissecting one block found ---------------------------------------------------
+        // x-post scored 40% of content with its motion compiled correctly, because the engine drew
+        // the card at the top-right corner instead of the centre. Every case below is one of the
+        // behaviours that put it there, measured on 0.28.1 and absent from this matrix until then.
+        // None of them is a property the corpus survey could have flagged: they are the ordinary
+        // CSS around the properties, which is why the matrix had no question about any of them.
+        // See docs/HARNESS.md, "What dissecting one block found".
+
+        // A percentage translate. translate(-50%, -50%) is the commonest centring idiom in the
+        // corpus - 31 blocks author one - and the compiler emits GSAP's xPercent/yPercent as one.
+        // The px form a few lines up paints and animates; this one is accepted and does nothing,
+        // in a static declaration and in @keyframes alike.
+        Added("transform", "translateX(-50%)", Box, "transform:translateX(-50%);",
+            animation: Moves("transform", "translateX(0)", "translateX(-50%)")),
+
+        // top: 50% against a static parent with no height of its own. A browser positions an
+        // absolute element against its nearest POSITIONED ancestor, or the initial containing
+        // block when there is none, so the card lands halfway down the frame. Three corpus blocks
+        // wrap their composition in exactly this: an unsized, static #root. The pair isolates the
+        // containing block - the sized parent is the control that shows top:50% itself works.
+        new("top", "50% in an unsized static parent",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                "html,body{height:100%;}.box{}.p{position:absolute;top:50%;" + Box + "}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                "html,body{height:100%;}.box{}.p{position:absolute;top:0;" + Box + "}")),
+
+        new("top", "50% in a sized static parent",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{height:200px;}.p{position:absolute;top:50%;" + Box + "}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{height:200px;}.p{position:absolute;top:0;" + Box + "}")),
+
+        // A margin on an absolutely positioned element. spotify-card centres its card with
+        // top/left: 50% and a negative margin of half its size, which is the other classic
+        // centring idiom. The margin-left case above, on a static block, is the control.
+        Added("margin-left", "80px, on position:absolute", Box + "position:absolute;top:0;left:0;",
+            "margin-left:80px;"),
+
+        // Pseudo-elements. 60 of 165 blocks use one - a glow, an underline, a highlight bar, a
+        // scrim. A solid one with explicit size paints nothing at all, so it is not a matter of
+        // which properties a pseudo-element supports: it is never generated.
+        new("::after", "content:'' with a size and a background",
+            new Doc(Div, ".p{position:relative;width:120px;height:80px;}"
+                         + ".p::after{content:\"\";position:absolute;left:0;top:0;width:120px;"
+                         + "height:80px;background:#d9642a;}"),
+            new Doc(Div, ".p{position:relative;width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        new("::before", "content:'' with a size and a background",
+            new Doc(Div, ".p{position:relative;width:120px;height:80px;}"
+                         + ".p::before{content:\"\";position:absolute;left:0;top:0;width:120px;"
+                         + "height:80px;background:#d9642a;}"),
+            new Doc(Div, ".p{position:relative;width:120px;height:80px;}"),
+            ControlPaintsNothing: true),
+
+        // An element INSIDE an <svg>, and the stylesheet. 16 blocks tween one - a path that fades
+        // in, a circle that scales. The rule below hides the rect in a browser; the animation
+        // fades it out. The <svg> root takes both (the next case), and a presentation attribute
+        // on the child is read (the one after), so the gap is specifically stylesheet-to-child.
+        new("<svg> child", "stylesheet opacity:0 on a rect",
+            new Doc(SvgRect, ".r{opacity:0;}"),
+            new Doc(SvgRect, ""),
+            new Animation("@keyframes probe{from{opacity:1;}to{opacity:0;}}"
+                          + ".r{animation:probe 2s linear both;}", 2)),
+
+        new("<svg>", "stylesheet opacity:0 on the root",
+            new Doc(SvgRect, "svg{opacity:0;}"),
+            new Doc(SvgRect, ""),
+            new Animation("@keyframes probe{from{opacity:1;}to{opacity:0;}}"
+                          + "svg{animation:probe 2s linear both;}", 2)),
+
+        new("<svg> child", "opacity=\"0\" attribute on a rect",
+            new Doc(SvgRect.Replace("class=\"r\"", "class=\"r\" opacity=\"0\""), ""),
+            new Doc(SvgRect, "")),
+
+        // A variable font's weight axis. Google Fonts answers a modern browser with ONE file for
+        // every weight a document asks for, and that single file is what the packager carries -
+        // 47 blocks link the service. The face below is that file: Inter, latin subset, wght
+        // 100-900. The two halves differ only in font-weight, so a 'yes' means bold is bold and a
+        // 'NO' means every weight in a fetched face is drawn the same.
+        //
+        // Reads NO for the wrong reason if the file is missing: both halves then fall back to the
+        // same face. The run prints whether it was found.
+        new("@font-face", "variable wght axis, 700 vs 400",
+            new Doc(Text, FaceRule("VarFace", VariableDataUri, "100 900")
+                          + ".p{font-family:'VarFace';font-size:40px;color:#d9642a;font-weight:700;}"),
+            new Doc(Text, FaceRule("VarFace", VariableDataUri, "100 900")
+                          + ".p{font-family:'VarFace';font-size:40px;color:#d9642a;font-weight:400;}")),
+
+        // ---- what the 0.34.0 corpus run ranked next -------------------------------------------
+        // After the six above were fixed, the engine's own diagnostics over the corpus and the
+        // blocks that paint MORE than the browser does ranked these. Each is here so the next
+        // upstream report quotes a row rather than a count of CF0050 lines.
+
+        // 20 blocks: every LIVE / BREAKING / kicker in the corpus is lowercase in the source and
+        // uppercased by CSS. Reported as unsupported; this asks whether it is also unpainted.
+        Added("text-transform", "uppercase", Ink, "text-transform:uppercase;", markup: Text),
+
+        // 23 blocks. A gradient told to cover half its box, against the same gradient filling it.
+        // Longhands, because the first draft wrote the shorthand with `no-repeat` and the CONTROL
+        // painted nothing - which is the case after this one.
+        Added("background-size", "50% 100% on a gradient",
+            "width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a,#3f6fd8);"
+            + "background-repeat:no-repeat;",
+            "background-size:50% 100%;"),
+
+        // The shorthand with a repeat keyword after the image, which is how a background that
+        // should not tile is usually written. Found by accident: the control above, written this
+        // way, rendered nothing at all.
+        Added("background", "gradient + no-repeat, shorthand", "width:200px;height:80px;",
+            "background:linear-gradient(90deg,#d9642a,#3f6fd8) no-repeat;", controlPaintsNothing: true),
+
+        // <text> inside an svg: the "r/" in a subreddit badge, axis labels, a logo's wordmark.
+        // CF0071 says one laid out 0x0 in two corpus blocks.
+        new("<svg> text", "<text> inside an inline svg",
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" viewBox=\"0 0 200 60\" "
+                    + "xmlns=\"http://www.w3.org/2000/svg\"><text x=\"10\" y=\"45\" font-size=\"40\" "
+                    + "fill=\"#d9642a\">Handgloves</text></svg></div>", ".p{width:200px;height:60px;}"),
+            new Doc("<div class=\"p\"></div>", ".p{width:200px;height:60px;}"),
+            ControlPaintsNothing: true),
+
+        // A gradient fill by reference, which is how every svg glow and ring in the corpus is
+        // coloured. The control fills the same rect with a flat colour, so a 'NO' here is not
+        // "nothing painted" - it is the gradient read as that colour or as nothing.
+        new("<svg> fill", "url(#gradient) on a rect",
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<defs><linearGradient id=\"g\"><stop offset=\"0\" stop-color=\"#d9642a\"/>"
+                    + "<stop offset=\"1\" stop-color=\"#3f6fd8\"/></linearGradient></defs>"
+                    + "<rect width=\"200\" height=\"60\" fill=\"url(#g)\"/></svg></div>",
+                ".p{width:200px;height:60px;}"),
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<rect width=\"200\" height=\"60\" fill=\"#d9642a\"/></svg></div>",
+                ".p{width:200px;height:60px;}")),
+
+        // A dashed stroke drawn on: the "path draws itself" idiom, animated through
+        // stroke-dashoffset in 6 corpus blocks. The control shows the whole stroke.
+        new("<svg> stroke", "stroke-dashoffset hides half a line",
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<line x1=\"0\" y1=\"30\" x2=\"200\" y2=\"30\" stroke=\"#d9642a\" stroke-width=\"20\" "
+                    + "stroke-dasharray=\"200\" stroke-dashoffset=\"100\"/></svg></div>",
+                ".p{width:200px;height:60px;}"),
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<line x1=\"0\" y1=\"30\" x2=\"200\" y2=\"30\" stroke=\"#d9642a\" stroke-width=\"20\" "
+                    + "stroke-dasharray=\"200\" stroke-dashoffset=\"0\"/></svg></div>",
+                ".p{width:200px;height:60px;}")),
+
+        // overflow: hidden on a parent whose child is transformed out of it. A wall of clones that
+        // slides, a ticker that scrolls: in each the parent is a window and the child leaves it.
+        // The control has no overflow rule and shows the child where it went.
+        new("overflow", "hidden clips a translated child",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:120px;height:80px;overflow:hidden;}"
+                + ".p{position:absolute;left:0;top:0;" + Box + "transform:translateX(100px);}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:120px;height:80px;}"
+                + ".p{position:absolute;left:0;top:0;" + Box + "transform:translateX(100px);}")),
+
+        new("overflow", "hidden clips a scaled child",
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:120px;height:80px;overflow:hidden;}"
+                + ".p{position:absolute;left:0;top:0;" + Box + "transform:scale(3);}"),
+            new Doc("<div class=\"box\"><div class=\"p\"></div></div>",
+                ".box{position:relative;width:120px;height:80px;}"
+                + ".p{position:absolute;left:0;top:0;" + Box + "transform:scale(3);}")),
+
+        // clip-path in the forms the corpus writes: inset() is above and reads NO; these are the
+        // other two. 29 blocks use one - every wipe, iris and mask reveal.
+        Added("clip-path", "circle(30%)", Box, "clip-path:circle(30%);"),
+        Added("clip-path", "polygon(...)", Box, "clip-path:polygon(0 0,100% 0,50% 100%);"),
+
+        // A flip card: the back face is rotated away and hidden. Without 3D transforms the two
+        // faces paint on top of each other, and backface-visibility decides which one shows.
+        Added("backface-visibility", "hidden, face rotated 180deg", Box + "transform:rotateY(180deg);",
+            "backface-visibility:hidden;"),
+
+        // ---- what the compiler could carry next, if the engine animates it ---------------------
+        // 0.35.0 paints all four. Whether each ANIMATES decides whether the compiler's refusal of
+        // the tween is still honest: clipPath is 89 refused tweens across 16 blocks, filter 166
+        // across 16, strokeDashoffset 32 across 10, rotationY 24 across 3.
+        Added("clip-path", "inset() animated, wipe", Box, "clip-path:inset(0 50% 0 0);",
+            animation: Moves("clip-path", "inset(0 100% 0 0)", "inset(0 0 0 0)")),
+        Added("filter", "blur animated", Box, "filter:blur(12px);",
+            animation: Moves("filter", "blur(0px)", "blur(12px)")),
+        Added("transform", "rotateY animated", Box, "transform:rotateY(70deg);",
+            animation: Moves("transform", "rotateY(0deg)", "rotateY(70deg)")),
+        // A gradient stop placed in px. Through 0.35.0 only a % position was read and a px one was
+        // dropped, which made every hairline and dot pattern in the corpus a fade - invisible while
+        // the gradient box was the element, a field of blobs once background-size tiled it (#273).
+        // Written like the rgba-vs-hex rows: the two halves SHOULD paint the same, so the honest
+        // reading is NO. 1px of a 200px line is 0.5%.
+        new("gradient stop", "1px, should match 0.5% of a 200px line",
+            new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 1px,transparent 1px);}"),
+            new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 0.5%,transparent 0.5%);}")),
+
+        new("<svg> stroke", "stroke-dashoffset animated, draw-on",
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<line class=\"l\" x1=\"0\" y1=\"30\" x2=\"200\" y2=\"30\" stroke=\"#d9642a\" stroke-width=\"20\" "
+                    + "stroke-dasharray=\"200\" stroke-dashoffset=\"100\"/></svg></div>",
+                ".p{width:200px;height:60px;}"),
+            new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
+                    + "<line class=\"l\" x1=\"0\" y1=\"30\" x2=\"200\" y2=\"30\" stroke=\"#d9642a\" stroke-width=\"20\" "
+                    + "stroke-dasharray=\"200\" stroke-dashoffset=\"0\"/></svg></div>",
+                ".p{width:200px;height:60px;}"),
+            new Animation("@keyframes probe{from{stroke-dashoffset:200;}to{stroke-dashoffset:0;}}"
+                          + ".l{animation:probe 2s linear both;}", 2)),
     ];
+
+    /// <summary>A rect inside an inline svg, the shape every icon in the corpus takes.</summary>
+    private const string SvgRect =
+        "<div class=\"p\" style=\"width:120px;height:80px;\">"
+        + "<svg width=\"100\" height=\"60\" viewBox=\"0 0 100 60\" xmlns=\"http://www.w3.org/2000/svg\">"
+        + "<rect class=\"r\" width=\"100\" height=\"60\" fill=\"#d9642a\"/></svg></div>";
+
+    /// <summary>An <c>@font-face</c> rule with a weight range, the way a font service writes one
+    /// for a variable face.</summary>
+    private static string FaceRule(string family, string src, string weights) =>
+        "@font-face{font-family:'" + family + "';font-weight:" + weights + ";src:url(" + src
+        + ") format('woff2');}";
+
+    /// <summary>Inter's latin subset as a variable face, inline. The file is the one Google Fonts
+    /// serves a current Chrome for <c>Inter:wght@400;700</c> - a single file answering both
+    /// weights - fetched on 2026-10-05 and kept beside this project under the OFL, so the case
+    /// asks about the file a package actually carries rather than a stand-in.</summary>
+    private static string VariableDataUri =>
+        VariablePath is { Length: > 0 } path && File.Exists(path)
+            ? "data:font/woff2;base64," + Convert.ToBase64String(File.ReadAllBytes(path))
+            : "data:font/woff2;base64,";
+
+    /// <summary>conformance/fonts/Inter-latin-wght.woff2, found the way <see cref="Woff2Path"/>
+    /// finds the corpus: by walking up from the binary, because this list is a static initialiser
+    /// and nothing a caller sets arrives in time.</summary>
+    public static string? VariablePath
+    {
+        get
+        {
+            for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+            {
+                var file = Path.Combine(d.FullName, "conformance", "fonts", "Inter-latin-wght.woff2");
+                if (File.Exists(file)) return file;
+            }
+            return null;
+        }
+    }
 
     /// <summary>An <c>@font-face</c> rule, written the way a document does.</summary>
     private static string FaceRule(string family, string src) =>

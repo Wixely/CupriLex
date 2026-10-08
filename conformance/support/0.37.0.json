@@ -2,7 +2,7 @@
   "engine": "0.37.0",
   "platform": "Win32NT",
   "runtime": "10.0.10",
-  "measured": "2026-10-07T22:15:41.8835893+00:00",
+  "measured": "2026-10-08T12:44:21.7540102+00:00",
   "support": [
     {
       "property": "width",
@@ -581,6 +581,13 @@
       "diagnostics": [
         "CF0050: CSS property \u0027animation-timing-function\u0027 is not supported and was ignored."
       ]
+    },
+    {
+      "property": "@import",
+      "value": "does not swallow the rule after it",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
     },
     {
       "property": "hidden",

@@ -218,7 +218,7 @@ internal static class Emit
                 Write(stops, tween, opening, closing);
 
                 current[key] = closing;
-                busyUntil[key] = tween.Start + tween.Duration;
+                busyUntil[key] = tween.Start + tween.Span;
             }
         }
 
@@ -326,22 +326,45 @@ internal static class Emit
         if (stops.Count > 0 && stops[^1].Time < tween.Start - Instant)
             stops.Add(new Stop(tween.Start - Instant, stops[^1].Number, stops[^1].Unit));
 
-        stops.Add(new Stop(tween.Start, from.Number, unit));
-
-        if (!Ease.IsLinear(tween.Ease))
+        // One set of stops per pass. A repeat is not a second animation - the engine allows only
+        // one per element - it is the same travel written again further along the single
+        // timeline, which is a shape a @keyframes holds perfectly well.
+        for (var pass = 0; pass <= tween.Repeat; pass++)
         {
-            for (var i = 1; i < Ease.Samples; i++)
-            {
-                var p = (double)i / Ease.Samples;
-                var eased = Ease.Of(tween.Ease, p);
-                stops.Add(new Stop(
-                    tween.Start + tween.Duration * p,
-                    from.Number + (to.Number - from.Number) * eased,
-                    unit));
-            }
-        }
+            var at = tween.Start + pass * tween.Duration;
 
-        stops.Add(new Stop(tween.Start + tween.Duration, to.Number, unit));
+            // yoyo walks back the way it came, so an odd pass runs end-to-start and needs no
+            // jump. Without yoyo the value snaps back to the start: a stop a hair before holds
+            // the end it reached, or the stylesheet would interpolate the snap into a slide and
+            // the repeat would read as one long oscillation.
+            var (opening, closing) = tween.Yoyo && pass % 2 == 1 ? (to, from) : (from, to);
+
+            if (pass == 0)
+                stops.Add(new Stop(at, opening.Number, unit));
+            else if (!tween.Yoyo)
+                // The previous pass already ended on `to` at exactly this instant, so the restart
+                // goes a hair LATER rather than a hair earlier. Putting it earlier writes a stop
+                // behind one already in the list, and the stops are read in time order: the whole
+                // pass was then read as one slow slide instead of a snap and a run.
+                stops.Add(new Stop(at + Instant, opening.Number, unit));
+
+            // yoyo needs nothing here: the previous pass ended on the value this one opens with.
+
+            if (!Ease.IsLinear(tween.Ease))
+            {
+                for (var i = 1; i < Ease.Samples; i++)
+                {
+                    var p = (double)i / Ease.Samples;
+                    var eased = Ease.Of(tween.Ease, p);
+                    stops.Add(new Stop(
+                        at + tween.Duration * p,
+                        opening.Number + (closing.Number - opening.Number) * eased,
+                        unit));
+                }
+            }
+
+            stops.Add(new Stop(at + tween.Duration, closing.Number, unit));
+        }
     }
 
     // ---- writing ------------------------------------------------------------------------------

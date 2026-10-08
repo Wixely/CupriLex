@@ -613,6 +613,17 @@ public static class Cases
             new Doc(Div, ".p{" + Box + "transform:translateX(80px);opacity:0.25;}"),
             At: 2),
 
+        // An @import takes the rule after it with it. 18 blocks open a <style> with one, pulling
+        // a web font the CSS way rather than with a <link>, and lose whatever they wrote first -
+        // for `vfx-text-cursor` that is the composition root, so the frame loses its background,
+        // its size and its clipping at once and renders white where the browser renders black.
+        //
+        // The pair differs only in the import, so a 'yes' means the rule survived it.
+        new("@import", "does not swallow the rule after it",
+            new Doc(Div, "@import url(nothing.css);" + Rule(Box)),
+            new Doc(Div, Rule("width:120px;height:80px;")),
+            ControlPaintsNothing: true),
+
         // The `hidden` attribute, which is display:none in every browser's UA stylesheet. The
         // control is the same element WITHOUT the attribute, so a 'yes' means hidden hid it. One
         // block writes a JSON data island this way, and the engine paints the JSON.

@@ -183,6 +183,36 @@ The one loser, `frost-sequence-camera-orbit` at 80.0% to 60.0%, is not a loss. I
 60 across four consecutive runs without a line of code touching it. It is the standing example of
 why the harness reports reference movement beside every number.
 
+### A finite repeat, and what it was worth, which was almost nothing
+
+`repeat: N` was the third largest group the refusal counts named: 37 tweens across 14 blocks, and
+**every one of them finite** - 1, 2, 3, 5, 7, 11, 12, with 24 of the 37 being `repeat: 1`. A
+finite repeat is not a second animation, which the engine forbids; it is the same travel written
+again further along the one timeline, which a `@keyframes` holds perfectly well. Without `yoyo`
+the value snaps back and runs again; with it, the value walks back the way it came.
+
+All 37 are carried now. The corpus moved **47.2% to 47.2%**, with one block up 0.9 points.
+
+That is the honest result and it is worth writing down rather than burying. The things that
+repeat in this corpus are tiny: a blinking caret in the two `flowchart` blocks, an album cover
+"breathing" by `scale: 1.015` in `spotify-card`, a pulse on a dot. Real motion, correctly carried
+now, and a handful of pixels each. The blocks with the most repeats are the liquid-glass ones,
+which paint their composition to a `<canvas>` from an `onUpdate` and cannot be helped by anything
+here.
+
+What did change is the report: 1,572 refusals to 1,537, and nothing now claims a repeat was
+dropped when it was not. A refusal that is no longer true is as much a defect as a rewrite that
+is no longer needed, and this one had been true since the compiler was written.
+
+**Infinite is still refused**, by name: `repeat: -1` has no last pass to write, and a rule that
+stopped after some arbitrary count would be a composition that quietly ends. A `repeatDelay` is
+named too, and the repeat carried without the gap.
+
+One bug of my own, caught by the tests it was written with. The first version put the restart
+stop a hair BEFORE the pass boundary, which placed it behind a stop already in the list. The
+stops are read in time order, so the snap became a slow slide and the whole repeat rendered as
+one long oscillation. The restart goes a hair after.
+
 `clipPath` is **not** carried, and it is the largest of the three at 89 tweens across 16 blocks.
 Its values are shapes — `inset(0 100% 0 0)`, `polygon(…)`, `none` — and every value in this
 compiler is an `Amount`, a number with a unit. Carrying it means a second kind of stop and a rule

@@ -9,6 +9,13 @@ internal readonly record struct Amount(double Number, string Unit);
 
 /// <summary>One tween as read, before its starting values are known. A <c>to</c> begins from
 /// wherever the element already is, which is not knowable until every tween is in time order.</summary>
+/// <param name="Repeat">How many EXTRA times the tween runs after the first, GSAP's own meaning:
+/// <c>repeat: 1</c> plays twice. A finite repeat is the same stops laid down again along one
+/// timeline, which the engine's single animation per element can hold; an infinite one cannot and
+/// is refused.</param>
+/// <param name="Yoyo">Whether every other pass runs backwards. It changes the shape of a repeat
+/// rather than the fact of it: with yoyo the value walks back the way it came, without it the
+/// value snaps to the start and runs again.</param>
 internal sealed record RawTween(
     string Selector,
     string Verb,
@@ -17,7 +24,16 @@ internal sealed record RawTween(
     string Ease,
     IReadOnlyDictionary<string, Amount> To,
     IReadOnlyDictionary<string, Amount>? From,
-    int Line);
+    int Line,
+    int Repeat = 0,
+    bool Yoyo = false)
+{
+    /// <summary>How long the tween occupies, repeats included. What the clock must advance past
+    /// and what the overlap check has to compare against: a tween that repeats four times and is
+    /// treated as one pass leaves everything after it early, and lets a later tween of the same
+    /// property through while this one is still running.</summary>
+    public double Span => Duration * (Repeat + 1);
+}
 
 /// <summary>A timeline being built: where the next tween lands, and what the labels mean.</summary>
 internal sealed class Clock
@@ -138,6 +154,11 @@ internal sealed class Reader
     /// rather than truncated, because half a loop is motion that stops for no reason.</para>
     /// </summary>
     private const int MostIterations = 256;
+
+    /// <summary>How many extra passes of a repeating tween this will write out. Each pass is a
+    /// full set of stops, and an eased one is eight of them, so a large repeat is a large rule
+    /// for a composition nobody can see repeating that often. The corpus's largest is 12.</summary>
+    private const int MostRepeats = 32;
 
     /// <summary>
     /// <c>for (let i = 0; i &lt; 6; i++)</c>, written out.
@@ -618,6 +639,38 @@ internal sealed class Reader
         // treating it as linear would put every un-eased element in the wrong place mid-tween.
         var ease = Text(values, defaults, "ease") ?? "power1.out";
 
+        // Read here, before the clock moves, because a repeating tween occupies every pass and
+        // anything appended after it would otherwise run early. The REFUSALS wait until the
+        // target is resolved, so they can name the selector.
+        var repeats = 0;
+        var yoyo = false;
+        string? repeatRefusal = null;
+
+        if (Setting(values, defaults, "repeat") is { } asked && asked != 0)
+        {
+            // A finite repeat is carried by writing the stops again, once per pass. An INFINITE
+            // one cannot be: `repeat: -1` has no last pass to write, and a rule that stopped
+            // after some arbitrary number of them would be a composition that quietly ends.
+            // Every repeat in this corpus is finite - 1, 2, 3, 5, 7, 11, 12, and 24 of the 37
+            // are `repeat: 1` - so the infinite case is refused on principle, not experience.
+            if (asked < 0)
+                repeatRefusal = $"repeat: {asked} never ends, and a @keyframes has to";
+            else if (asked != Math.Floor(asked) || asked > MostRepeats)
+                repeatRefusal = $"repeat: {asked} is more than this writes out";
+            else
+            {
+                repeats = (int)asked;
+                yoyo = Setting(values, defaults, "yoyo") is { } flag && flag != 0;
+
+                // A gap between passes needs stops that hold the end value for its length.
+                // Nothing in the corpus writes one, so it is named rather than guessed at - and
+                // the repeat is still carried, continuous, which is closer than not repeating.
+                if (Setting(values, defaults, "repeatDelay") is { } gap && gap != 0)
+                    repeatRefusal = $"a repeatDelay of {gap}s, which this writes out as a "
+                                    + "continuous repeat with no gap";
+            }
+        }
+
         // ---- where it lands --------------------------------------------------------------------
 
         double start;
@@ -648,7 +701,7 @@ internal sealed class Reader
         if (clock is not null)
         {
             clock.LastStart = start;
-            clock.Cursor = Math.Max(clock.Cursor, start + duration);
+            clock.Cursor = Math.Max(clock.Cursor, start + duration * (repeats + 1));
         }
 
         // ---- and only now, what it is worth ----------------------------------------------------
@@ -696,8 +749,8 @@ internal sealed class Reader
                 $"a stagger of {stagger}s on '{selector}': it needs one animation per element and "
                 + "the engine allows one per element in total", line));
 
-        if (Setting(values, defaults, "repeat") is { } repeat && repeat != 0)
-            _refusals.Add(new Refusal($"repeat: {repeat} on '{selector}'", line));
+        if (repeatRefusal is not null)
+            _refusals.Add(new Refusal($"{repeatRefusal} (on '{selector}')", line));
 
         var (to, refusedTo) = Amounts(values, selector, verb, line);
         var from = fromValues is null ? null : Amounts(fromValues, selector, verb, line).Amounts;
@@ -710,7 +763,8 @@ internal sealed class Reader
         // several times.
         foreach (var target in selectors)
             _tweens.Add(new RawTween(
-                target, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line));
+                target, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line,
+                repeats, yoyo));
     }
 
     /// <summary>

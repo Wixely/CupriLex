@@ -617,4 +617,85 @@ public class CompilerTests
         Assert.Contains("#a1 { animation:", compiled.Motion.Css);
         Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("overlaps"));
     }
+
+    // ---- a finite repeat ------------------------------------------------------------------------
+    // A repeat is not a second animation - the engine allows one per element - it is the same
+    // travel written again further along the single timeline. 37 tweens across 14 blocks ask for
+    // one and every one of them is finite.
+
+    [Fact]
+    public void A_repeat_lays_the_stops_down_again_and_occupies_the_extra_time()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 1, ease: "none", repeat: 1 });
+            """);
+
+        // Two passes of one second, so the composition is two seconds long, not one.
+        Assert.Contains("2s linear both", css);
+        // and it snaps back to the start to run again
+        Assert.Contains("translateX(0px)", css);
+        Assert.Contains("translateX(100px)", css);
+    }
+
+    /// <summary>Without yoyo the value snaps back and runs again, so the end value must still be
+    /// held a hair before the restart - otherwise the stylesheet interpolates the snap into a
+    /// slide and the repeat reads as one long oscillation.</summary>
+    [Fact]
+    public void A_repeat_without_yoyo_snaps_back_rather_than_sliding_back()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 1, ease: "none", repeat: 1 });
+            """);
+
+        // The pass boundary sits at 50% of the two seconds: the first pass ends there on 100px,
+        // and the restart is a hair LATER so it cannot collide with a stop already written.
+        Assert.Contains("50% { transform: translateX(100px); }", css);
+        Assert.Contains("50.05% { transform: translateX(0px); }", css);
+        Assert.Contains("100% { transform: translateX(100px); }", css);
+    }
+
+    [Fact]
+    public void A_yoyo_walks_back_the_way_it_came()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 1, ease: "none", repeat: 1, yoyo: true });
+            """);
+
+        // No snap at the boundary: out to 100px at the midpoint and back to 0 by the end, and
+        // nothing restating the opening value a hair after halfway.
+        Assert.Contains("50% { transform: translateX(100px); }", css);
+        Assert.Contains("100% { transform: translateX(0px); }", css);
+        Assert.DoesNotContain("50.05%", css);
+    }
+
+    /// <summary>An infinite repeat has no last pass to write. A rule that stopped after some
+    /// arbitrary number of them would be a composition that quietly ends.</summary>
+    [Fact]
+    public void An_infinite_repeat_is_refused_by_name()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 1, repeat: -1 });
+            """);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("never ends"));
+    }
+
+    /// <summary>The clock has to clear every pass, or everything appended after a repeating tween
+    /// runs early - which looks like correct motion at the wrong time.</summary>
+    [Fact]
+    public void A_tween_after_a_repeat_starts_after_every_pass()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 1, ease: "none", repeat: 2 });
+            tl.to(".b", { opacity: 0, duration: 1, ease: "none" });
+            """, """<div class="a"></div><div class="b"></div>""");
+
+        // three passes of the first, then one second more: four seconds in total
+        Assert.Contains("4s linear both", css);
+    }
 }

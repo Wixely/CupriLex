@@ -51,6 +51,23 @@ internal abstract record Value
         Number n => n.Of.ToString("R", CultureInfo.InvariantCulture),
         _ => null,
     };
+
+    /// <summary>
+    /// JavaScript truthiness, or null when it is not knowable.
+    ///
+    /// <para>Separate from <see cref="AsNumber"/>, which is what the ternary used and which calls
+    /// a string and an object unknowable. Both are truthy in JavaScript, and a block that writes
+    /// <c>if (CONFIG.mode)</c> or <c>if (CONFIG.grid)</c> means exactly that. Null is the only
+    /// answer that must never be guessed at: an unknown test means neither branch is read, and
+    /// the calls inside are named in the report as unreached.</para>
+    /// </summary>
+    public bool? Truth => this switch
+    {
+        Number n => n.Of != 0,
+        Text t => t.Of.Length > 0,
+        Selector or Bag or List or Routine or Timeline => true,
+        _ => null,
+    };
 }
 
 /// <summary>Names in scope, and what they were bound to. A name assigned more than once is bound
@@ -148,9 +165,27 @@ internal static class Evaluator
         _ => new Value.Unknown($"a {node.Type} is outside what can be resolved without running it"),
     };
 
+    /// <summary>The single expression a helper returns, or null when its body does anything more
+    /// than return one. A body with branches or statements is a function to be followed, not a
+    /// value to be computed, and that is the statement walker's job.</summary>
+    private static Node? Returned(Node body) => body switch
+    {
+        BlockStatement { Body: [ReturnStatement { Argument: { } only }] } => only,
+        BlockStatement => null,
+        _ => body,      // an expression-bodied arrow: `const clamp = (v) => Math.min(1, v)`
+    };
+
     private static Value Unary(UnaryExpression node, Scope scope)
     {
         var inner = Of(node.Argument, scope);
+        // `!` is here because the corpus guards whole features with it - `if (!CONFIG.src)` picks
+        // the stand-in media, `if (!CONFIG.grid.enabled)` hides the grid - and a negation this
+        // could not fold left the branch unread and its motion refused.
+        if (node.Operator == Acornima.Operator.LogicalNot)
+            return inner.Truth is { } truth
+                ? new Value.Number(truth ? 0 : 1)
+                : new Value.Unknown("a ! of something not known");
+
         return (node.Operator, inner.AsNumber) switch
         {
             (Acornima.Operator.UnaryNegation, { } n) => new Value.Number(-n),
@@ -264,8 +299,43 @@ internal static class Evaluator
     /// matter what the document contains, and a selector that matches nothing produces a rule that
     /// matches nothing rather than a wrong guess.</para>
     /// </summary>
+    /// <summary>How deep a helper may call another before this gives up. A guard, not a budget:
+    /// nothing in this corpus nests more than twice, and a helper that calls itself would
+    /// otherwise not return.</summary>
+    private const int MostNesting = 8;
+
+    [ThreadStatic] private static int _nesting;
+
     private static Value Call(CallExpression node, Scope scope)
     {
+        // A helper that only computes. `function clamp(v, lo, hi) { return Math.min(hi,
+        // Math.max(lo, v)); }` is arithmetic with a name, and this corpus keeps its timings in
+        // one: `var IN = clamp(DUR * 0.08, 0.3, 0.8)`. Refusing it made every tween placed at IN
+        // unknowable, and the clock could not be advanced past them.
+        //
+        // This is not the statement walker's rule about stepping into a body once. That rule is
+        // about following a function for what it does to a timeline, where reading it twice would
+        // emit the motion twice. A function evaluated for its RETURN VALUE has no such hazard, so
+        // the number of call sites does not matter.
+        if (node.Callee is Identifier called
+            && scope.Lookup(called.Name) is Value.Routine routine
+            && Returned(routine.Body) is { } expression)
+        {
+            if (_nesting >= MostNesting)
+                return new Value.Unknown($"a helper nested more than {MostNesting} deep");
+
+            var inner = new Scope(scope);
+            for (var i = 0; i < routine.Parameters.Count; i++)
+                if (routine.Parameters[i] is Identifier parameter)
+                    inner.Bind(parameter.Name, i < node.Arguments.Count
+                        ? Of(node.Arguments[i], scope)
+                        : new Value.Unknown("a parameter with no argument"));
+
+            _nesting++;
+            try { return Of(expression, inner); }
+            finally { _nesting--; }
+        }
+
         if (node.Callee is not MemberExpression { Property: Identifier name } callee)
             return new Value.Unknown("a call this compiler cannot resolve");
 

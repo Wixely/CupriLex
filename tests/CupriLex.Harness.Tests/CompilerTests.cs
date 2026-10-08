@@ -541,4 +541,80 @@ public class CompilerTests
 
         Assert.Contains("#card { animation:", css);
     }
+
+    // ---- a list of targets --------------------------------------------------------------------
+    // GSAP takes an array of targets as readily as one, and this corpus leans on it: 60 tweens
+    // across 15 blocks write one. They were all refused, and refused as "plain objects", which is
+    // what a tween of `{t: 0}` is - so the report sent the reader looking for an onUpdate that was
+    // never there. share-sheet-carousel alone writes 26 and rendered a still.
+
+    private const string Pair = """<div id="a1"></div><div id="b1"></div><div id="a2"></div>""";
+
+    [Fact]
+    public void An_array_of_selectors_animates_every_one_of_them()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(["#a1", "#b1"], { opacity: 0, duration: 1, ease: "none" });
+            """, Pair);
+
+        Assert.Contains("#a1 { animation:", css);
+        Assert.Contains("#b1 { animation:", css);
+    }
+
+    /// <summary>The shape the carousel actually writes: the index is folded, then the strings are
+    /// concatenated, then the array is read. All three already worked except the last.</summary>
+    [Fact]
+    public void An_array_of_concatenated_selectors_resolves_each_entry()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            const i = 1;
+            tl.to(["#a" + i, "#b" + i], { opacity: 0, duration: 1, ease: "none" });
+            """, Pair);
+
+        Assert.Contains("#a1 { animation:", css);
+        Assert.Contains("#b1 { animation:", css);
+    }
+
+    /// <summary>All of it or none. Half a list is motion applied to some elements and silently
+    /// not to others, which is worse than a refusal because nothing says so.</summary>
+    [Fact]
+    public void A_list_with_one_unreadable_entry_is_refused_whole()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(["#a1", someElement], { opacity: 0, duration: 1 });
+            """, Pair);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("at least one entry"));
+    }
+
+    /// <summary>A tween of a plain object is a different failure and must keep saying so: GSAP
+    /// driving numbers for an onUpdate to paint with, and there is no onUpdate here.</summary>
+    [Fact]
+    public void A_plain_object_target_is_still_reported_as_one()
+    {
+        var compiled = Compile("""
+            const clock = { t: 0 };
+            gsap.timeline().to(clock, { t: 1, duration: 1 });
+            """, Pair);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("plain object"));
+    }
+
+    /// <summary>The same element twice is one animation. Emitted twice it would collide with
+    /// itself and the second would be refused as an overlap.</summary>
+    [Fact]
+    public void A_repeated_entry_does_not_collide_with_itself()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(["#a1", "#a1"], { opacity: 0, duration: 1, ease: "none" });
+            """, Pair);
+
+        Assert.Contains("#a1 { animation:", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("overlaps"));
+    }
 }

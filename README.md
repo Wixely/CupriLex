@@ -78,21 +78,21 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.36.0, over the corpus pinned at
+On CupriFace 0.37.0, over the corpus pinned at
 [`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824)
 — see [docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
 | blocks scored | **168 of 172** |
-| **mean of content** | **44.3%** — the number to beat |
-| median | 40.9% |
-| mean of frame | 75.8% |
-| where it is wrong, off by | 28.5% of full scale |
-| blocks that render one still frame | 105 of 168 |
-| **blocks the engine paints almost nothing in** | **76 of 168** |
+| **mean of content** | **47.2%** — the number to beat |
+| median | 49.7% |
+| mean of frame | 78.0% |
+| where it is wrong, off by | 28.1% of full scale |
+| blocks that render one still frame | 100 of 168 |
+| **blocks the engine paints almost nothing in** | **74 of 168** |
 
-Measured 6 October 2026, with the faces a block links from a font service *not* fetched, so it is
+Measured 7 October 2026, with the faces a block links from a font service *not* fetched, so it is
 comparable with every number before it. On the same pin, in order:
 
 | | mean of content | what changed |
@@ -101,12 +101,18 @@ comparable with every number before it. On the same pin, in order:
 | 0.28.1 | 40.3% | two translator workarounds for engine gaps found by dissecting one block |
 | 0.34.0 | 43.5% | the engine fixed six of those gaps; both workarounds deleted |
 | 0.35.0 | 43.5% | six more gaps fixed, and a tiled-gradient regression that cancelled them |
-| **0.36.0** | **44.3%** | the regression fixed, and the older bug under it |
+| 0.36.0 | 44.3% | the regression fixed, and the older bug under it |
+| 0.37.0 | 46.0% | positioned radial gradients, every background layer, and `hidden` |
+| 0.37.0 | 46.2% | the compiler learning to read a list of targets — ours, not the engine's |
+| 0.37.0 | 46.3% | and carrying the 3D rotations and the stroke dash pair, refused since 0.35.0 |
+| **0.37.0** | **47.2%** | and reading an `if` whose test is a constant, which nothing had ever walked |
 
-Three engine releases in two days, thirteen issues raised from this repository's measurements and
-all thirteen fixed. The last two rows are the mechanism earning its keep: 0.35.0's six fixes moved
-the mean by **nothing** because a regression arrived with them, the corpus run said so the same
-day, and the fix for it was worth 0.8 points plus everything 0.35.0 had been owed. See
+Four engine releases in three days, seventeen issues raised from this repository's measurements
+and sixteen fixed. Two rows are the mechanism earning its keep. 0.35.0's six fixes moved the mean
+by **nothing**, because a regression arrived with them and the corpus run said so the same day.
+And 0.37.0 is the largest jump the corpus has had — `slack-notification-ad`, the motion canary and
+for months the worst-scoring one, went from **20.0% to 93.6%** — because the three gaps it closed
+were found by taking a single block apart rather than by counting properties. See
 [docs/CONFORMANCE.md](docs/CONFORMANCE.md).
 
 **The commit is part of the number.** The corpus is somebody else's work, fetched rather than

@@ -110,6 +110,18 @@ internal sealed class Reader
                 UnrollOf(each, scope);
                 break;
 
+            // A branch whose test the evaluator can decide is straight-line code with one side
+            // written down. These blocks guard whole features behind a literal config flag -
+            // `if (CONFIG.animationIn)` over an object that says `animationIn: true` three
+            // screens up - and leaving the branch unread refused the motion inside it. A test
+            // that is NOT decidable leaves both sides unread, exactly as before, and Unreached()
+            // names what was in them.
+            case IfStatement branch:
+                if (Evaluator.Of(branch.Test, scope).Truth is { } taken
+                    && (taken ? branch.Consequent : branch.Alternate) is { } followed)
+                    Statement(followed, new Scope(scope));
+                break;
+
             default:
                 // Not followed. Whatever motion is inside gets named by Unreached().
                 break;
@@ -642,20 +654,30 @@ internal sealed class Reader
         // ---- and only now, what it is worth ----------------------------------------------------
 
         var targetValue = Evaluator.Of(arguments[0], scope);
+        var selectors = Targets(targetValue);
 
-        if (Selector(targetValue) is not { } selector)
+        if (selectors.Count == 0)
         {
-            // A tween of a plain object is a different animal from a tween of an element that
-            // could not be resolved, and the report should not call them the same thing: GSAP is
-            // being used to drive numbers that an onUpdate then paints with, and there is no
-            // onUpdate here.
-            _refusals.Add(new Refusal(targetValue is Value.Bag or Value.List
-                ? $"a .{verb}() of the plain object `{Snippet(arguments[0])}` - it animates numbers "
-                  + "for a callback to use, and there is no JavaScript to run the callback"
-                : $"a .{verb}() on `{Snippet(arguments[0])}`, which could not be reduced to a CSS "
-                  + "selector", line));
+            // Three different failures, and the report must not call them one thing. A tween of a
+            // plain object is GSAP driving numbers for an onUpdate to paint with, and there is no
+            // onUpdate here. A LIST that did not resolve is a target this could almost read - it
+            // used to be reported as a plain object, which sent the reader looking for a callback
+            // that was never there.
+            _refusals.Add(new Refusal(targetValue switch
+            {
+                Value.Bag => $"a .{verb}() of the plain object `{Snippet(arguments[0])}` - it "
+                             + "animates numbers for a callback to use, and there is no JavaScript "
+                             + "to run the callback",
+                Value.List => $"a .{verb}() on the list `{Snippet(arguments[0])}`, where at least "
+                              + "one entry could not be reduced to a CSS selector",
+                _ => $"a .{verb}() on `{Snippet(arguments[0])}`, which could not be reduced to a "
+                     + "CSS selector",
+            }, line));
             return;
         }
+
+        // For the messages below, which are about the tween rather than about one of its targets.
+        var selector = selectors.Count == 1 ? selectors[0] : string.Join(", ", selectors);
 
         Value.Bag? fromValues = null;
         if (verb == "fromTo")
@@ -683,8 +705,41 @@ internal sealed class Reader
 
         if (to.Count == 0 && (from is null || from.Count == 0)) return;
 
-        _tweens.Add(new RawTween(
-            selector, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line));
+        // One tween per target. The engine gives every element its own animation anyway, so a
+        // list is not a special kind of tween - it is the same tween written once and meant
+        // several times.
+        foreach (var target in selectors)
+            _tweens.Add(new RawTween(
+                target, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line));
+    }
+
+    /// <summary>
+    /// The elements a tween targets, as selectors, or empty when it cannot be reduced to any.
+    ///
+    /// <para>GSAP takes an array of targets as readily as one, and this corpus leans on it: a
+    /// carousel writes <c>tl.set(["#bg-" + n, "#slide-" + n], …)</c> to swap a background and its
+    /// slide together. 60 of those across 15 blocks were refused as "plain objects", which was
+    /// both a lost tween and a misleading reason.</para>
+    ///
+    /// <para><b>Every entry must resolve or none does.</b> Carrying the half of a list that
+    /// happened to be readable is motion applied to some elements and silently not to others,
+    /// which is the failure this compiler exists to avoid. Duplicates are collapsed: the same
+    /// element twice is one animation, and emitting it twice would trip the overlap refusal.</para>
+    /// </summary>
+    private static IReadOnlyList<string> Targets(Value value)
+    {
+        if (Selector(value) is { } single) return [single];
+        if (value is not Value.List list || list.Of.Count == 0) return [];
+
+        var all = new List<string>(list.Of.Count);
+
+        foreach (var item in list.Of)
+        {
+            if (Selector(item) is not { } css) return [];
+            if (!all.Contains(css, StringComparer.Ordinal)) all.Add(css);
+        }
+
+        return all;
     }
 
     /// <summary>GSAP's position parameter, which is five different things wearing one coat.</summary>
@@ -745,9 +800,14 @@ internal sealed class Reader
 
             if (!Properties.TryMap(name, out _, out var unit))
             {
+                // The list grows as the engine learns: width, height, opacity and transform were
+                // all of it until 0.35.0 added clip-path, the 3D rotations and the svg stroke
+                // properties. Naming the set here rather than saying "unsupported" is what makes
+                // a refusal that has gone stale visible - see conformance/support.
                 refused.Add(new Refusal(
-                    $"'{name}' on '{selector}': the engine animates only width, height, opacity "
-                    + "and transform, so a tween of it would run and change nothing", line));
+                    $"'{name}' on '{selector}': the engine animates width, height, opacity, "
+                    + "transform and the stroke dash properties, and not this, so a tween of it "
+                    + "would run and change nothing", line));
                 continue;
             }
 

@@ -44,9 +44,151 @@ anyway — **constant folding and binding resolution**:
 - an immediately invoked function is read as if its body were written where it stands, because it
   is. Nearly every block wraps everything in one, and counting those bodies as "inside a function"
   reported that almost nothing in the corpus was straight-line code
+- **an `if` whose test folds to a constant**, following the side that runs and skipping the other.
+  These blocks keep their options in one object literal and guard whole features with it -
+  `if (CONFIG.animationIn)` over an object that says `animationIn: true` three screens up - and a
+  branch left unread refused every tween inside it. A test that is *not* decidable leaves both
+  sides unread, exactly as before
+- **a helper that only computes.** `function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo,
+  v)); }` is arithmetic with a name, and this corpus keeps its timings in one. This is not the
+  rule below about stepping into a body once: that rule is about following a function for what it
+  does to a *timeline*, where reading it twice would emit the motion twice. A function evaluated
+  for its return value has no such hazard, so the number of call sites does not matter
+- **a list of targets.** GSAP takes an array as readily as one element, and the tween is emitted
+  once per entry — the engine gives each element its own animation anyway, so a list is not a
+  special kind of tween but the same tween meant several times. All of it or none: carrying the
+  half of a list that happened to resolve is motion applied to some elements and silently not to
+  others
 
 What stays refused: loops, callbacks, functions invoked more than once, anything depending on a
 value that is not in the source. Those are named and counted, never half-carried.
+
+### The list of targets was the last cheap one, and it was hiding behind a wrong word
+
+Found by dissecting `share-sheet-carousel`, which painted 0.80 of its frame against the browser's
+0.85 — so the whole composition was there — and moved **not at all**. 26 of its 27 refusals read:
+
+```
+a .set() of the plain object `["#ssc-bg-" + (current + 1), "#ssc-slide-" + (current + 1)]`
+  - it animates numbers for a callback to use, and there is no JavaScript to run the callback
+```
+
+That sentence describes `gsap.to(clock, { t: 1 })`, which is a real and different thing. This is
+an array of two selectors built by concatenation, and every part of it was already resolvable:
+the `forEach` unrolled, `i` bound, `current` was followed across iterations, and `"#ssc-bg-" + n`
+folded. Only the array itself was not read, and the refusal called it a plain object — so the
+report sent anyone reading it to look for an `onUpdate` that was never there.
+
+60 tweens across 15 blocks wrote one. A `Value.List` whose entries do not all resolve now says
+that instead, and a genuine plain object still says what it always said.
+
+Over the corpus: **46.0% to 46.2%**, three blocks better and one worse. `share-sheet-carousel`
+**45.3% to 63.9%**, `notification-cascade` 70.1 to 71.7, `slack-notification-ad` 93.6 to 94.3.
+(`frost-sequence-camera-orbit` reads 40.0 to 60.0 and is not a gain: neither side paints anything
+and its reference moves 0.03% of its pixels, so one sample flipping is the whole difference. The
+harness warns about exactly this.)
+
+**The loser is the interesting one, and it is not a bug.** `logo-outro` fell 75.2% to 72.9%,
+because `pieceArray` resolved into six selectors and two tweens that had been refused whole are
+now read. The first is carried — but its `stagger: 0.02` cannot be, so its six pieces move
+together instead of 20ms apart. The second overlaps it on `scale` and is refused once per
+element. Carrying motion that is knowably incomplete scored worse here than carrying none.
+
+That is the existing stagger policy meeting targets it could not previously reach, not something
+this change introduced, and the report is strictly better than it was: six named refusals about a
+stagger and an overlap, where before there were two saying "plain object" about an array. A score
+that dips while the report improves is a trade worth making, and worth writing down so the next
+person does not treat it as a regression.
+
+### Refusals that went stale when the engine learned
+
+A rewrite that is no longer needed is a bug, and so is a refusal. CupriFace 0.35.0 started
+animating the 3D rotations and the svg stroke properties, the conformance matrix recorded it, and
+this compiler went on refusing them for two releases — 56 tweens it could have carried, with a
+message that still said the engine animates "only width, height, opacity and transform".
+
+`rotationX` and `rotationY` are now transform components, appended to `TransformOrder` rather than
+slotted in beside `rotate`: the order there is arbitrary-but-fixed, and moving an existing
+component would change the path every two-component transform takes between the same two states.
+
+The stroke pair needed two findings before it worked at all.
+
+**A dash array inside `@keyframes` is ignored, measured on 0.37.0.** An undashed stroke has
+nothing for the offset to wind, so the whole draw-on renders as a finished line at every instant.
+The same declaration in an ordinary rule works perfectly — ink across a 2s line goes 0, 3000,
+6000 — so an invariant dash array is now hoisted out of the keyframes and written beside the
+animation. Every one in this corpus is invariant, because the script sets it once from the path's
+own length. One that really varies stays in the animation, because writing one of its values as a
+constant would be a different composition rather than a worse one.
+
+**AngleSharp.Css drops the SVG presentation properties at parse time.** `stroke-dashoffset: 1000`
+is absent from the object model *and* from the rule's own `CssText`, so the cascade reader could
+not see the start value that makes a draw-on a draw-on. `flowchart` authors exactly that and
+tweens the offset to 0, which compiled from 0 to 0 — a path drawn from the first frame. The rules
+are now collected a second time as text and matched by selector, which is what `Images.Fit()`
+already does for `object-fit` and for the same reason. Source order, no specificity, documented as
+such: it is read for one purpose, and no block in this corpus states a stroke twice at two
+specificities.
+
+Over the corpus: **46.2% to 46.3%, three blocks better and none worse.** `flowchart` 59.0 to
+64.1, `flowchart-vertical` 63.5 to 67.5, `ui-3d-reveal` 85.4 to 89.8. The first two are the
+draw-on and the third is the 3D rotation.
+
+Three of 21, because **16 of the blocks that tween a dash offset get their length from
+`path.getTotalLength()`**, which is the path's own geometry and not a number in the source. The
+compiler never runs the document and never will, so those stay refused — correctly, and for a
+reason that has nothing to do with the mapping. The two flowcharts are the ones that write the
+length as a literal in CSS, which is why reading the cascade mattered more than the mapping did.
+
+### The branch nobody was reading
+
+`yt-vertical-fill` scored **0.0% of content at every sample** - the browser painted white and the
+engine painted near-black, every pixel maximally wrong - with only five refusals. The browser is
+white because the block's very first tween is `tl.from(root, { opacity: 0 })`, so the composition
+starts transparent and fades in. The engine never applied it.
+
+That tween sits inside `if (CONFIG.animationIn)`, over an object literal that says
+`animationIn: true`. The whole script is an IIFE, which the walker follows; the `if` inside it was
+not a case in the statement switch at all, so it fell to `default:` and the branch was never read.
+Three of the block's five refusals were really one cause.
+
+Fixing that exposed the next one immediately: `IN` and `OUT`, which place the tweens either side,
+are `clamp(DUR * 0.08, 0.3, 0.8)` - a two-line helper called twice, where the rule about stepping
+into a body once said no. It is a value, not a timeline, so the rule did not apply; it just had
+not been separated from the rule that does.
+
+Together: **0.0% to 40.0%**, and the block's declared motion now spans its full 7.95s rather than
+0.5s. Both ends are exact, because the fade-in and the fade-out are both carried. The middle is
+still wrong for a reason nothing can fix here - the portrait media is `document.createElement` on
+a `CONFIG.src` of `null`.
+
+**Over the corpus it was worth far more than the block it came from: 46.4% to 47.2%, five blocks
+better and one worse, and the median moved 45.7% to 49.7%.**
+
+| | | |
+|---|---|---|
+| `yt-logo-intro` | 7.4% | **61.4%** |
+| `yt-lcd-background` | 54.9% | **94.9%** |
+| `mk-clone-wall-transition` | 22.9% | 42.8% |
+| `yt-vertical-fill` | 0.0% | 40.0% |
+| `mk-background` | 40.4% | 41.2% |
+
+`mk-clone-wall-transition` is one of the nine canaries, chosen for being the only block where
+colour and geometry fidelity can show up at all. Four blocks nobody was looking at were each
+holding a feature behind a config flag.
+
+The one loser, `frost-sequence-camera-orbit` at 80.0% to 60.0%, is not a loss. It paints
+**nothing** on either side - engine ink 0.0000, reference ink 0.0003 - and its reference moves
+0.03% of its pixels. One sample flipping is its whole score, and it has now read 40, 60, 80 and
+60 across four consecutive runs without a line of code touching it. It is the standing example of
+why the harness reports reference movement beside every number.
+
+`clipPath` is **not** carried, and it is the largest of the three at 89 tweens across 16 blocks.
+Its values are shapes — `inset(0 100% 0 0)`, `polygon(…)`, `none` — and every value in this
+compiler is an `Amount`, a number with a unit. Carrying it means a second kind of stop and a rule
+about which shapes interpolate into which, which the engine itself only does between shapes of
+the same kind. That is a design change rather than a mapping, and it is the next real piece of
+work here.
 
 ---
 

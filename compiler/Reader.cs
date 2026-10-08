@@ -852,6 +852,31 @@ internal sealed class Reader
         {
             if (Properties.Controls.Contains(name)) continue;
 
+            // clip-path is a SHAPE, not a number, and every other value here is a number with a
+            // unit. The `inset()` form is four numbers though - one per edge - so it expands into
+            // four components and merges with anything else on the element the way the transform
+            // components do. `none` is the unclipped state, which is inset(0 0 0 0).
+            //
+            // 51 of the corpus's 57 clip-path values are one of those two. The rest - polygon(),
+            // circle() - are shapes this cannot reduce to numbers and are refused by name.
+            if (name == "clipPath")
+            {
+                if (Inset(value.AsText) is { } edges)
+                    for (var i = 0; i < Properties.ClipOrder.Length; i++)
+                        amounts[Properties.ClipOrder[i]] = edges[i];
+                else if (Polygon(value.AsText) is { } points)
+                    for (var i = 0; i < points.Count; i++)
+                    {
+                        amounts[$"clipP{i}x"] = points[i].X;
+                        amounts[$"clipP{i}y"] = points[i].Y;
+                    }
+                else
+                    refused.Add(new Refusal(
+                        $"'clipPath' on '{selector}': only inset() and none reduce to numbers this "
+                        + $"can interpolate, and this is `{value.AsText ?? "not a string"}`", line));
+                continue;
+            }
+
             if (!Properties.TryMap(name, out _, out var unit))
             {
                 // The list grows as the engine learns: width, height, opacity and transform were
@@ -876,6 +901,85 @@ internal sealed class Reader
         }
 
         return (amounts, refused);
+    }
+
+    /// <summary>
+    /// The points of a <c>polygon()</c>, or null for anything else.
+    ///
+    /// <para>A polygon is 2N numbers, and two polygons interpolate point by point when they have
+    /// the same count - which is how these compositions write a wipe: the same nine-point shape
+    /// with its vertices swept from one side to the other. A pair with DIFFERENT counts cannot
+    /// interpolate and is caught downstream, where the stops for a point that only one end has
+    /// would have nothing to travel from.</para>
+    /// </summary>
+    private static List<(Amount X, Amount Y)>? Polygon(string? text)
+    {
+        if (text is null) return null;
+        var trimmed = text.Trim();
+
+        if (!trimmed.StartsWith("polygon(", StringComparison.OrdinalIgnoreCase)
+            || !trimmed.EndsWith(')'))
+            return null;
+
+        var points = new List<(Amount, Amount)>();
+
+        foreach (var pair in trimmed[8..^1].Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var axes = pair.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries);
+
+            // A fill rule - `polygon(evenodd, ...)` - is one token where a point is two, and it
+            // is not something this reduces to numbers.
+            if (axes.Length != 2) return null;
+            if (Amount(new Value.Text(axes[0]), "%") is not { } x) return null;
+            if (Amount(new Value.Text(axes[1]), "%") is not { } y) return null;
+
+            points.Add((x, y));
+        }
+
+        return points.Count >= 3 ? points : null;
+    }
+
+    /// <summary>
+    /// The four edges of an <c>inset()</c>, or null for a shape this cannot reduce to numbers.
+    ///
+    /// <para>CSS's own shorthand: one value is all four edges, two are vertical then horizontal,
+    /// three are top, horizontal, bottom, and four are top, right, bottom, left. A trailing
+    /// <c>round &lt;radius&gt;</c> is dropped rather than refused - the corners of a clip are not
+    /// what a wipe is about, and refusing the whole tween over them would lose the wipe.</para>
+    /// </summary>
+    private static Amount[]? Inset(string? text)
+    {
+        if (text is null) return null;
+        var trimmed = text.Trim();
+
+        if (trimmed.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return [new Amount(0, ""), new Amount(0, ""), new Amount(0, ""), new Amount(0, "")];
+
+        if (!trimmed.StartsWith("inset(", StringComparison.OrdinalIgnoreCase)
+            || !trimmed.EndsWith(')'))
+            return null;
+
+        var inner = trimmed[6..^1];
+        var round = inner.IndexOf("round", StringComparison.OrdinalIgnoreCase);
+        if (round >= 0) inner = inner[..round];
+
+        var parts = inner.Split([' ', '	'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length is 0 or > 4) return null;
+
+        var edge = new Amount[4];
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (Amount(new Value.Text(parts[i]), "") is not { } value) return null;
+            edge[i] = value;
+        }
+
+        return parts.Length switch
+        {
+            1 => [edge[0], edge[0], edge[0], edge[0]],
+            2 => [edge[0], edge[1], edge[0], edge[1]],
+            3 => [edge[0], edge[1], edge[2], edge[1]],
+            _ => edge,
+        };
     }
 
     /// <summary>A tween value, with its unit. <c>100</c>, <c>"100px"</c> and <c>"50%"</c> are all

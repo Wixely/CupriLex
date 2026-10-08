@@ -213,12 +213,46 @@ stop a hair BEFORE the pass boundary, which placed it behind a stop already in t
 stops are read in time order, so the snap became a slow slide and the whole repeat rendered as
 one long oscillation. The restart goes a hair after.
 
-`clipPath` is **not** carried, and it is the largest of the three at 89 tweens across 16 blocks.
-Its values are shapes — `inset(0 100% 0 0)`, `polygon(…)`, `none` — and every value in this
-compiler is an `Amount`, a number with a unit. Carrying it means a second kind of stop and a rule
-about which shapes interpolate into which, which the engine itself only does between shapes of
-the same kind. That is a design change rather than a mapping, and it is the next real piece of
-work here.
+### clipPath, as numbers
+
+`clipPath` was the largest of the three at 89 tweens across 16 blocks, and it is carried now. Its
+values are shapes, not amounts, which is why it waited: every value in this compiler is an
+`Amount`, a number with a unit. The way through is that the two shapes this corpus writes **are**
+amounts once decomposed.
+
+`inset(0 100% 0 0)` becomes four components, `clipTop` through `clipLeft`, expanded the way CSS
+expands its own shorthand: one value is all four edges, two are vertical then horizontal, three
+leave the left edge to copy the right. `none` is `inset(0 0 0 0)`. `polygon(…)` becomes 2N
+components, `clipP0x`, `clipP0y` and so on, and reassembles in point order. Anything else —
+`url(#mask)`, a `circle()` — is refused by name with the value quoted, so the report says which
+shape rather than which property. Two refusals remain in the corpus on that account, both
+`circle()`; the engine animates it, so it is carryable if it ever becomes worth a third shape
+rule.
+
+A shape only interpolates into a shape of the same kind, and the engine is no more forgiving than
+a browser: an `inset` does not become a `polygon`, and two polygons need the same point count.
+Decomposing per component enforces that without a rule of its own — a component that has no
+counterpart has no stop to write.
+
+Two things this turned up. A clip edge with no tween **rests at zero**, and zero carries no unit,
+so a wipe of the left edge emits `inset(0 0% 0 0)` at one keyframe and `inset(0 0% 0 0%)` at the
+next. Measured rather than assumed: the engine interpolates across that unit change, and the two
+forms paint identically mid-wipe. That is a should-match row in the matrix, so a future version
+that stops interpolating says so.
+
+The other was a bug this exposed rather than introduced. A `.set()` was being refused for want of
+a resting value, which is a question that only makes sense for a tween that has to travel from
+somewhere. A `.set()` states its value outright. Refusing it threw away the assignment that
+establishes a wipe's first shape, and the `.to()` after it then had nothing to start from either,
+so the whole wipe went. The guard now asks only of a `to`.
+
+The corpus mean did not move — 47.2% before and after — and the per-block gains are small:
+`lt-clean-bar` +2.5, `lt-bold-block` +1.2, `news-ticker` +0.1, the rest unchanged. Worth writing
+down why, because "no gain" and "no effect" are different claims. A wipe occupies half a second
+of a five-second timeline and the harness takes five samples, so a correct wipe is mostly sampled
+outside its own window. These blocks are held down by other things: `lt-mask-reveal` wants a
+Montserrat 900 nobody can answer, `transitions-radial` is a canvas. 87 tweens that were dropped
+are now carried, and the picture is right at times the harness does not look.
 
 ---
 

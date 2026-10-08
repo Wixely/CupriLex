@@ -52,7 +52,7 @@ internal sealed record Motion(
 /// is refused by name rather than emitted into a declaration that would parse, run, and change
 /// nothing - which is the failure this whole repository is arranged around.</para>
 /// </summary>
-internal static class Properties
+internal static partial class Properties
 {
     /// <summary>GSAP's name, the CSS or transform component it becomes, and the unit it carries.</summary>
     private static readonly Dictionary<string, (string Name, string Unit)> Known = new()
@@ -77,6 +77,15 @@ internal static class Properties
         ["autoAlpha"] = ("opacity", ""),     // GSAP also flips visibility; the engine ignores that anyway
         ["width"] = ("width", "px"),
         ["height"] = ("height", "px"),
+        // clip-path, as the four edges of an inset(). The engine has animated it since 0.35.0
+        // (#268) and a wipe is the commonest transition there is: 89 tweens across 16 blocks,
+        // 70 of them in the `transitions-*` family alone. The four are tracked separately for
+        // the same reason the transform components are - one element gets one animation, so a
+        // tween of one edge has to merge with a tween of another.
+        ["clipTop"] = ("clipTop", ""),
+        ["clipRight"] = ("clipRight", ""),
+        ["clipBottom"] = ("clipBottom", ""),
+        ["clipLeft"] = ("clipLeft", ""),
         // The draw-on idiom: dash the path by its own length, then wind the offset to zero. Both
         // halves are needed - an offset with no dash array has nothing to offset - and the engine
         // has animated them since 0.35.0 (#262). 36 tweens across 10 blocks.
@@ -96,8 +105,34 @@ internal static class Properties
 
     public static bool IsTransform(string name) => TransformOrder.Contains(name);
 
+    /// <summary>The four edges of a <c>clip-path: inset()</c>, in the order CSS writes them.
+    /// Assembled into one declaration exactly as the transform components are.</summary>
+    public static readonly string[] ClipOrder = ["clipTop", "clipRight", "clipBottom", "clipLeft"];
+
+    public static bool IsClip(string name) => ClipOrder.Contains(name) || IsPolygonPoint(name);
+
+    /// <summary>A point of a <c>clip-path: polygon()</c>, as <c>clipP3x</c>. Generated rather
+    /// than listed because the point count is the author's: the corpus writes polygons of 4 and
+    /// of 9 points, and a fixed table would cap what can be carried at whatever was typed out.</summary>
+    public static bool IsPolygonPoint(string name) => PolygonPoint().IsMatch(name);
+
+    /// <summary>The index of a polygon point component, for ordering them back into one shape.</summary>
+    public static int PointIndex(string name) =>
+        int.Parse(PolygonPoint().Match(name).Groups["i"].Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^clipP(?<i>\d+)(?<axis>[xy])$")]
+    private static partial System.Text.RegularExpressions.Regex PolygonPoint();
+
     public static bool TryMap(string gsapName, out string cssName, out string unit)
     {
+        if (IsPolygonPoint(gsapName))
+        {
+            cssName = gsapName;
+            unit = "%";
+            return true;
+        }
+
         if (Known.TryGetValue(gsapName, out var mapped))
         {
             cssName = mapped.Name;

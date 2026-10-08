@@ -2,7 +2,7 @@
   "engine": "0.37.0",
   "platform": "Win32NT",
   "runtime": "10.0.10",
-  "measured": "2026-10-08T12:44:21.7540102+00:00",
+  "measured": "2026-10-08T13:55:59.8150361+00:00",
   "support": [
     {
       "property": "width",
@@ -532,6 +532,13 @@
       "diagnostics": []
     },
     {
+      "property": "clip-path",
+      "value": "inset(), 0 vs 0% mid-wipe, should match",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
       "property": "gradient stop",
       "value": "1px, should match 0.5% of a 200px line",
       "parses": true,
@@ -581,6 +588,20 @@
       "diagnostics": [
         "CF0050: CSS property \u0027animation-timing-function\u0027 is not supported and was ignored."
       ]
+    },
+    {
+      "property": "z-index",
+      "value": "a lower z-index puts an element behind",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "blur(12px) in a rule, for contrast with the keyframe",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
     },
     {
       "property": "@import",

@@ -698,4 +698,83 @@ public class CompilerTests
         // three passes of the first, then one second more: four seconds in total
         Assert.Contains("4s linear both", css);
     }
+
+    // ---- clip-path, as numbers ------------------------------------------------------------------
+    // The engine has animated clip-path since 0.35.0 and a wipe is the commonest transition there
+    // is: 89 tweens across 16 blocks. A shape is not an Amount, but the two forms this corpus
+    // writes are: inset() is four edges and polygon() is 2N points.
+
+    [Fact]
+    public void An_inset_clip_becomes_four_edges_and_wipes()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.set(".a", { clipPath: "inset(0 100% 0 0)" }, 0);
+            tl.to(".a", { clipPath: "inset(0 0% 0 0)", duration: 1, ease: "none" }, 0);
+            """);
+
+        Assert.Contains("clip-path: inset(0 100% 0 0)", css);
+        Assert.Contains("clip-path: inset(0 0% 0 0)", css);
+    }
+
+    /// <summary>CSS's own shorthand, so one value is all four edges and two are vertical then
+    /// horizontal. Getting this wrong clips the wrong edge, which still looks like a wipe.</summary>
+    [Theory]
+    [InlineData("inset(10%)", "inset(10% 10% 10% 10%)")]
+    [InlineData("inset(10% 20%)", "inset(10% 20% 10% 20%)")]
+    [InlineData("inset(10% 20% 30%)", "inset(10% 20% 30% 20%)")]
+    [InlineData("none", "inset(0 0 0 0)")]
+    public void An_inset_expands_the_way_css_does(string written, string expected)
+    {
+        var css = Css($$"""
+            const tl = gsap.timeline();
+            tl.set(".a", { clipPath: "{{written}}" }, 0);
+            tl.to(".a", { opacity: 0, duration: 1, ease: "none" }, 0);
+            """);
+
+        Assert.Contains("clip-path: " + expected, css);
+    }
+
+    [Fact]
+    public void A_polygon_clip_becomes_its_points_and_keeps_their_order()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.fromTo(".a",
+                { clipPath: "polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%)" },
+                { clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)", duration: 1, ease: "none" }, 0);
+            """);
+
+        Assert.Contains("clip-path: polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%)", css);
+        Assert.Contains("clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)", css);
+    }
+
+    /// <summary>A .set() states its value outright and needs no start to travel from. Refusing
+    /// one for want of a resting value threw away the assignment that establishes a wipe's first
+    /// shape, and the .to() after it then had nothing to start from either.</summary>
+    [Fact]
+    public void A_set_of_a_polygon_stands_without_a_resting_value()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.set(".a", { clipPath: "polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%)" }, 0);
+            tl.to(".a", { clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)", duration: 1, ease: "none" }, 0);
+            """);
+
+        Assert.Contains("clip-path: polygon(", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("a tween TO a size"));
+    }
+
+    /// <summary>A shape that is not numbers stays refused, by name and with the value quoted, so
+    /// the report says which shape rather than "clip-path".</summary>
+    [Fact]
+    public void A_shape_that_is_not_numbers_is_refused_by_name()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { clipPath: "url(#mask)", duration: 1 });
+            """);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("url(#mask)"));
+    }
 }

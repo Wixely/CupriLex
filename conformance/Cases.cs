@@ -537,6 +537,21 @@ public static class Cases
         // the gradient box was the element, a field of blobs once background-size tiled it (#273).
         // Written like the rgba-vs-hex rows: the two halves SHOULD paint the same, so the honest
         // reading is NO. 1px of a 200px line is 0.5%.
+        // ---- mixed units inside one inset(), which this compiler emits ------------------------
+        // A clip edge with no tween rests at zero, and zero has no unit, so a wipe that moves the
+        // LEFT edge emits `inset(0 0% 0 0)` at one keyframe and `inset(0 0% 0 0%)` at the next.
+        // The two halves below SHOULD paint the same at mid-animation, so the honest reading is
+        // NO. A "yes" says the engine will not interpolate across a unit change and every wipe
+        // this compiler writes snaps instead of sliding.
+        new("clip-path", "inset(), 0 vs 0% mid-wipe, should match",
+            new Doc(Div, ".p{" + Box + "}"
+                + "@keyframes probe{from{clip-path:inset(0 0% 0 0);}to{clip-path:inset(0 0% 0 100%);}}"
+                + ".p{animation:probe 2s linear both;}"),
+            new Doc(Div, ".p{" + Box + "}"
+                + "@keyframes probe{from{clip-path:inset(0 0% 0 0%);}to{clip-path:inset(0 0% 0 100%);}}"
+                + ".p{animation:probe 2s linear both;}"),
+            At: 1),
+
         new("gradient stop", "1px, should match 0.5% of a 200px line",
             new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 1px,transparent 1px);}"),
             new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 0.5%,transparent 0.5%);}")),
@@ -612,6 +627,26 @@ public static class Cases
                          + "animation-timing-function:linear,linear;animation-fill-mode:both,both;}"),
             new Doc(Div, ".p{" + Box + "transform:translateX(80px);opacity:0.25;}"),
             At: 2),
+
+        // z-index is ignored entirely: two overlapping positioned elements stack in document
+        // order whatever they declare, even at -1. 71 of 172 blocks declare it, 258 times, and
+        // nothing is reported. The pair differs only in the z-index, so a 'yes' means it moved
+        // the element in the stack. CupriFace #290.
+        new("z-index", "a lower z-index puts an element behind",
+            new Doc("<div class=\"under\"></div><div class=\"p\"></div>",
+                ".under{position:absolute;left:40px;top:10px;width:120px;height:60px;background:#3f6fd8;z-index:2;}"
+                + ".p{position:absolute;left:0;top:0;width:100px;height:60px;background:#d9642a;z-index:1;}"),
+            new Doc("<div class=\"under\"></div><div class=\"p\"></div>",
+                ".under{position:absolute;left:40px;top:10px;width:120px;height:60px;background:#3f6fd8;z-index:2;}"
+                + ".p{position:absolute;left:0;top:0;width:100px;height:60px;background:#d9642a;z-index:9;}")),
+
+        // filter paints in an ordinary rule and does nothing from a keyframe. 171 tweens across
+        // 18 blocks, and the transitions family is 123 of them - a blur that ramps as one slide
+        // leaves IS the transition. CupriFace #291. The `filter blur animated` row above reads
+        // the animate column; this one shows the static form works, so the two together say
+        // "paints, does not animate" rather than "unsupported".
+        Added("filter", "blur(12px) in a rule, for contrast with the keyframe",
+            "width:120px;height:80px;background:#d9642a;", "filter:blur(12px);"),
 
         // An @import takes the rule after it with it. 18 blocks open a <style> with one, pulling
         // a web font the CSS way rather than with a <link>, and lose whatever they wrote first -

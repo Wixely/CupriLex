@@ -49,6 +49,14 @@ internal static class Emit
         // started anyway. That is what makes the draw-on idiom carryable without reading the
         // document: the resting state is the solid line.
         "stroke-dashoffset" or "stroke-dasharray" => 0,
+        // An element nobody has clipped is clipped to its own box, which is inset(0 0 0 0) and
+        // the same picture as `none`. So a tween TO a clip starts from unclipped, which is what
+        // a wipe-in means.
+        "clipTop" or "clipRight" or "clipBottom" or "clipLeft" => 0,
+        // A polygon point has no resting value: an element with no clip has no vertices, and
+        // inventing one at the origin would collapse the shape to a corner. A tween that needs
+        // to know where a point started is refused, the way a tween of a size is.
+        _ when Properties.IsPolygonPoint(component) => null,
         _ => Properties.Identity(component),
     };
 
@@ -184,7 +192,12 @@ internal static class Emit
                                 : default,
                 };
 
-                if (tween.Verb != "fromTo" && tween.Verb != "from"
+                // Only a `.to()`. A `.set()` states the value outright and needs no start to
+                // travel from, so refusing one for want of a resting value threw away an
+                // assignment that was perfectly knowable - which is how a polygon wipe lost the
+                // `.set()` that establishes its first shape, and with it the whole tween that
+                // follows, since the `.to()` then had nothing to start from either.
+                if (tween.Verb == "to"
                     && !current.ContainsKey(key) && Resting(component) is null
                     && Start(authored, tween.Selector, component, target) is null)
                 {
@@ -422,9 +435,46 @@ internal static class Emit
 
         if (transform.Count > 0) parts.Add("transform: " + string.Join(" ", transform));
 
+        // The points, back into one polygon, in the order the author wrote them. A shape is only
+        // a shape in order: sorting by index is what keeps point 3 the third vertex rather than
+        // wherever the dictionary happened to put it.
+        var polygon = properties.Keys.Where(Properties.IsPolygonPoint).ToList();
+
+        if (polygon.Count > 0)
+        {
+            var corners = polygon
+                .GroupBy(Properties.PointIndex)
+                .OrderBy(point => point.Key)
+                .Select(point =>
+                {
+                    string Axis(char axis) =>
+                        properties.TryGetValue($"clipP{point.Key}{axis}", out var stops)
+                            ? At(stops, time) is var (number, unit) ? Number(number) + unit : "0"
+                            : "0";
+
+                    return Axis('x') + " " + Axis('y');
+                });
+
+            parts.Add("clip-path: polygon(" + string.Join(", ", corners) + ")");
+        }
+
+        // The four edges, back into one declaration. Written whenever any of them is tracked, so
+        // a tween of a single edge still produces a complete inset() rather than a fragment.
+        else if (Properties.ClipOrder.Any(properties.ContainsKey))
+        {
+            var edges = Properties.ClipOrder.Select(edge =>
+            {
+                if (!properties.TryGetValue(edge, out var stops)) return "0";
+                var (number, unit) = At(stops, time);
+                return Number(number) + unit;
+            });
+
+            parts.Add("clip-path: inset(" + string.Join(" ", edges) + ")");
+        }
+
         foreach (var (component, stops) in properties)
         {
-            if (Properties.IsTransform(component)) continue;
+            if (Properties.IsTransform(component) || Properties.IsClip(component)) continue;
             var (number, unit) = At(stops, time);
             parts.Add($"{component}: {Number(number)}{unit}");
         }

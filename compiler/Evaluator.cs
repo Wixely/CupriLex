@@ -44,7 +44,10 @@ internal abstract record Value
     /// text layer's whole timeline. Reading null as unknown refused 150 tweens across 25 blocks
     /// that the browser does not run either.</para>
     /// </summary>
-    public sealed record Nothing : Value;
+    /// <param name="IsNull">Which of the two it was written as. Needed only by <c>===</c>, where
+    /// <c>null === undefined</c> is FALSE while <c>null == undefined</c> is true - so collapsing
+    /// the pair would make strict equality a coin flip exactly where loose equality is certain.</param>
+    public sealed record Nothing(bool IsNull = true) : Value;
 
     /// <summary>Not resolvable, and why. The reason is carried all the way into the report.</summary>
     public sealed record Unknown(string Why) : Value;
@@ -162,12 +165,12 @@ internal static class Evaluator
         NumericLiteral n => new Value.Number(n.Value),
         StringLiteral s => new Value.Text(s.Value),
         BooleanLiteral b => new Value.Number(b.Value ? 1 : 0),
-        NullLiteral => new Value.Nothing(),
+        NullLiteral => new Value.Nothing(IsNull: true),
 
         // `undefined` is an identifier in JavaScript, not a literal, and nothing rebinds it in a
         // composition. A block that writes `CONFIG.src || undefined` means the same falsy thing
         // as one that writes null.
-        Identifier { Name: "undefined" } => new Value.Nothing(),
+        Identifier { Name: "undefined" } => new Value.Nothing(IsNull: false),
 
         Identifier id => scope.Lookup(id.Name),
 
@@ -255,6 +258,22 @@ internal static class Evaluator
             && left.AsText is { } a && right.AsText is { } b)
             return new Value.Text(a + b);
 
+        // Equality against null, which is how this corpus asks whether an optional feature was
+        // configured: `if (END.imagesTo != null)`. Decided ONLY when a side is Nothing - and
+        // deliberately not extended to `<`, `<=`, `>`, `>=`, which coerce (`null >= 0` is TRUE,
+        // and the arithmetic guard below refuses those for the wrong reason with the right
+        // outcome).
+        if (Equality(node.Operator) is { } strict && (left is Value.Nothing || right is Value.Nothing))
+        {
+            if (Same(left, right, strict) is not { } same)
+                return new Value.Unknown($"{node.Operator} over a value that is not known");
+
+            var wanted = node.Operator is Acornima.Operator.Equality
+                or Acornima.Operator.StrictEquality;
+
+            return new Value.Number(same == wanted ? 1 : 0);
+        }
+
         if (left.AsNumber is not { } x || right.AsNumber is not { } y)
             return new Value.Unknown($"{node.Operator} over values that are not both known");
 
@@ -269,6 +288,40 @@ internal static class Evaluator
             _ => new Value.Unknown($"operator {node.Operator}"),
         };
     }
+
+    /// <summary>Whether an operator is one of the four equalities, and whether it is the strict
+    /// kind. Null for everything else.</summary>
+    private static bool? Equality(Acornima.Operator op) => op switch
+    {
+        Acornima.Operator.Equality or Acornima.Operator.Inequality => false,
+        Acornima.Operator.StrictEquality or Acornima.Operator.StrictInequality => true,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether two values are equal, for a comparison where at least one side is null or
+    /// undefined. Null when the answer is not knowable.
+    ///
+    /// <para>ECMA's abstract equality says null and undefined equal each other and nothing else,
+    /// which makes <c>x == null</c> the idiomatic "is this unset" test and makes it decidable the
+    /// moment either side is known to be one of them. Strict equality does not coerce, so it
+    /// additionally needs to know WHICH of the two - hence the discriminator on
+    /// <see cref="Value.Nothing"/>.</para>
+    ///
+    /// <para>The one case that stays unknowable: a side this compiler could not resolve. It might
+    /// be null and it might not, and nothing about the comparison narrows it.</para>
+    /// </summary>
+    private static bool? Same(Value left, Value right, bool strict) => (left, right) switch
+    {
+        (Value.Nothing a, Value.Nothing b) => !strict || a.IsNull == b.IsNull,
+
+        // An unresolvable value could itself be null, so neither answer is available.
+        (Value.Unknown, _) or (_, Value.Unknown) => null,
+
+        // One side is null or undefined and the other is a value that is neither, which under both
+        // equalities is false.
+        _ => false,
+    };
 
     private static Value Conditional(ConditionalExpression node, Scope scope)
     {

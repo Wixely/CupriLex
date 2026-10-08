@@ -1007,4 +1007,186 @@ public class CompilerTests
         Assert.Empty(compiled.Motion.Css);
         Assert.Contains(compiled.Refusals, r => r.What.Contains("2 .to() call(s)", StringComparison.Ordinal));
     }
+
+    // ---- a write THROUGH an object ---------------------------------------------------------------
+    // This used to do nothing at all, so an object kept the value its literal was written with and
+    // a tween reading it compiled to a number the browser had already overwritten. A silently
+    // wrong value, which is the one outcome this compiler is arranged to avoid.
+
+    [Fact]
+    public void A_value_written_into_an_object_is_the_one_a_tween_reads()
+    {
+        var css = Css("""
+            const DATA = { n: 10 };
+            DATA.n = 99;
+            const tl = gsap.timeline();
+            tl.to(".a", { x: DATA.n, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("translateX(99px)", css);
+        Assert.DoesNotContain("translateX(10px)", css);
+    }
+
+    [Fact]
+    public void A_write_through_a_nested_object_is_followed_too()
+    {
+        var css = Css("""
+            const CONFIG = { grid: { rows: 2 } };
+            CONFIG.grid.rows = 40;
+            const tl = gsap.timeline();
+            tl.to(".a", { x: CONFIG.grid.rows, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("translateX(40px)", css);
+    }
+
+    [Fact]
+    public void A_write_at_a_key_this_cannot_resolve_poisons_the_whole_object()
+    {
+        // The conservative half. An unknowable key could be any of them, so none of them can be
+        // trusted afterwards - including one the literal still appears to state.
+        var compiled = Compile("""
+            const DATA = { n: 10 };
+            DATA[window.which] = 1;
+            const tl = gsap.timeline();
+            tl.to(".a", { x: DATA.n, duration: 1 });
+            """);
+
+        Assert.DoesNotContain("translateX(10px)", compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("not a plain number", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_counter_on_an_object_is_stepped()
+    {
+        var css = Css("""
+            const S = { t: 0 };
+            S.t += 2;
+            S.t++;
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 10, duration: 1, ease: "none" }, S.t);
+            """);
+
+        // Three seconds in on a four-second timeline: the stop sits at 75%.
+        Assert.Contains("75%", css);
+    }
+
+    // ---- equality against null -------------------------------------------------------------------
+    // How this corpus asks whether an optional feature was configured. Decided only when a side is
+    // known to be null or undefined; `<`, `<=`, `>` and `>=` are left alone because they coerce.
+
+    [Theory]
+    [InlineData("E.a != null", "{ a: 1 }", true)]
+    [InlineData("E.a != null", "{ a: null }", false)]
+    [InlineData("E.a == null", "{ a: null }", true)]
+    [InlineData("E.a === null", "{ a: null }", true)]
+    [InlineData("E.a === null", "{ a: 1 }", false)]
+    [InlineData("E.a !== null", "{ a: 1 }", true)]
+    public void A_test_against_null_is_decided(string test, string data, bool taken)
+    {
+        var css = Css($$"""
+            const E = {{data}};
+            const tl = gsap.timeline();
+            if ({{test}}) { tl.to(".a", { x: 7, duration: 1, ease: "none" }); }
+            else { tl.to(".a", { x: 3, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains(taken ? "translateX(7px)" : "translateX(3px)", css);
+    }
+
+    /// <summary>`null == undefined` is true and `null === undefined` is false, which is why the two
+    /// cannot be the same value here however alike they look.</summary>
+    [Theory]
+    [InlineData("null == undefined", true)]
+    [InlineData("null === undefined", false)]
+    [InlineData("undefined == null", true)]
+    [InlineData("0 == null", false)]
+    [InlineData("\"\" == null", false)]
+    public void The_two_kinds_of_nothing_are_told_apart(string test, bool taken)
+    {
+        var css = Css($$"""
+            const tl = gsap.timeline();
+            if ({{test}}) { tl.to(".a", { x: 7, duration: 1, ease: "none" }); }
+            else { tl.to(".a", { x: 3, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains(taken ? "translateX(7px)" : "translateX(3px)", css);
+    }
+
+    [Fact]
+    public void A_relational_operator_against_null_is_still_refused()
+    {
+        // `null >= 0` is TRUE in JavaScript, because relational operators coerce where equality
+        // does not. Nothing here models that, so the branch stays unread rather than guessed.
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (null >= 0) { tl.to(".a", { x: 7, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("could not decide", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_test_against_null_over_something_unknown_stays_undecided()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (window.foo == null) { tl.to(".a", { x: 7, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("could not decide", StringComparison.Ordinal));
+    }
+
+    // ---- a method name is not a tween ------------------------------------------------------------
+    // to, set, from and fromTo are four of the most ordinary method names in JavaScript, and nine
+    // corpus blocks drive a three.js scene with them. All 37 were counted as motion this compiler
+    // had dropped. A report that invents losses is as bad as one that hides them.
+
+    [Fact]
+    public void A_three_js_call_that_shares_a_tween_name_is_not_counted_as_motion()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 1, duration: 1 });
+            function scene() {
+              group.rotation.set(0, 1, 0);
+              camera.position.set(0, 0, 5);
+              Float32Array.from(points);
+            }
+            """);
+
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("call(s)", StringComparison.Ordinal));
+    }
+
+    /// <summary>The generous half, and the direction to err in: a bare name this walk never
+    /// resolved might be a timeline built somewhere it could not follow, so it is still reported.</summary>
+    [Fact]
+    public void A_bare_receiver_this_never_resolved_is_still_reported()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 1, duration: 1 });
+            function build() { other.to(".b", { x: 1, duration: 1 }); }
+            """);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("`build()`", StringComparison.Ordinal));
+    }
+
+    /// <summary>A style write does not change which element a name refers to. Poisoning the
+    /// binding for one cost mk-background both its size tweens, because the target stopped
+    /// resolving - the regression that found this.</summary>
+    [Fact]
+    public void A_style_write_leaves_the_element_binding_alone()
+    {
+        var css = Css("""
+            const card = document.querySelector(".a");
+            card.style.opacity = "0.5";
+            const tl = gsap.timeline();
+            tl.to(card, { x: 100, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("translateX(100px)", css);
+    }
 }

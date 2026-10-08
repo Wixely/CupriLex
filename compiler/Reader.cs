@@ -74,6 +74,11 @@ internal sealed class Reader
     /// that claims motion was lost when none was is worse than a quiet one.</para>
     /// </summary>
     private readonly HashSet<Node> _decided = [];
+
+    /// <summary>Every name the walk ever bound to a timeline. Used only by
+    /// <see cref="Unreached"/>, to tell a motion call from something that merely shares a method
+    /// name with one.</summary>
+    private readonly HashSet<string> _timelines = ["gsap"];
     private int _scriptLine;
     private string _scriptSource = "";
 
@@ -359,6 +364,7 @@ internal sealed class Reader
         if (declarator.Init is CallExpression call && Call(call, scope) is { } clock)
         {
             scope.Bind(name.Name, new Value.Timeline(clock));
+            _timelines.Add(name.Name);
             return;
         }
 
@@ -409,6 +415,26 @@ internal sealed class Reader
                     Evaluator.Of(compound.Right, scope)));
                 break;
 
+            // `DATA.text = x`, `CONFIG.grid.rows = n`. This used to fall through to default: and
+            // do NOTHING, which left the object holding the value the literal was written with -
+            // so a tween reading it compiled to a value the browser had already overwritten. A
+            // silently wrong number, which is the one outcome this compiler is arranged to avoid.
+            // Measured: `const DATA = { n: 10 }; DATA.n = 99;` emitted translateX over 10.
+            case AssignmentExpression { Left: MemberExpression into } written:
+                Write(into, written.Operator == Acornima.Operator.Assignment
+                    ? Routine(written.Right) ?? Evaluator.Of(written.Right, scope)
+                    : Compound(written, Evaluator.Of(into, scope),
+                        Evaluator.Of(written.Right, scope)), scope);
+                break;
+
+            case UpdateExpression { Argument: MemberExpression into } stepped:
+                Write(into, Evaluator.Of(into, scope).AsNumber is { } was
+                    ? new Value.Number(stepped.Operator == Acornima.Operator.Increment
+                        ? was + 1 : was - 1)
+                    : new Value.Unknown("a counter on an object, whose value is not known here"),
+                    scope);
+                break;
+
             case UpdateExpression { Argument: Identifier counted } update:
                 scope.Set(counted.Name, scope.Lookup(counted.Name).AsNumber is { } n
                     ? new Value.Number(update.Operator == Acornima.Operator.Increment ? n + 1 : n - 1)
@@ -422,6 +448,116 @@ internal sealed class Reader
             default:
                 break;
         }
+    }
+
+    /// <summary>
+    /// A write THROUGH an object, honoured rather than ignored.
+    ///
+    /// <para>The chain is resolved to a root name and a path of keys, and the object is rebuilt
+    /// with the new value at that path. Rebuilt rather than mutated because a <see cref="Value.Bag"/>
+    /// is a record over a read-only dictionary, and rebuilding is the honest shape anyway: the
+    /// binding is replaced, so anything that captured the old one is unaffected, which is what
+    /// const semantics say about the binding and NOT what JavaScript says about the object. That
+    /// difference is the one way this can still be wrong, and it is the direction that refuses
+    /// rather than guesses - see below.</para>
+    ///
+    /// <para>Anything the path cannot resolve - a computed key that is not knowable, a root that
+    /// is not an object this models, a write into a list - poisons the ROOT binding to
+    /// <see cref="Value.Unknown"/>. An object something has written to in a way this cannot follow
+    /// is no longer a description of itself, and every read of it afterwards must be refused.</para>
+    /// </summary>
+    private static void Write(MemberExpression target, Value value, Scope scope)
+    {
+        var keys = new List<string>();
+
+        for (Node node = target; ; )
+        {
+            if (node is MemberExpression hop)
+            {
+                var key = hop.Computed ? Evaluator.Of(hop.Property, scope).AsText : Evaluator.Key(hop.Property);
+
+                // An unknowable key could be any of them, so none of them can be trusted.
+                if (key is null)
+                {
+                    Poison(target, scope);
+                    return;
+                }
+
+                keys.Insert(0, key);
+                node = hop.Object;
+                continue;
+            }
+
+            // `this.x = y`, `window.x = y`, `getThing().x = y`: no binding of ours to rewrite, and
+            // nothing of ours goes stale either.
+            if (node is not Identifier root) return;
+
+            if (!Rebuilt(scope.Lookup(root.Name), keys, 0, value, out var whole)) return;
+
+            scope.Set(root.Name, whole ?? new Value.Unknown(
+                $"'{root.Name}' was written through in a way this compiler cannot follow, so every "
+                + "value read out of it afterwards would be the one it started with"));
+
+            return;
+        }
+    }
+
+    /// <summary>The root binding replaced by <see cref="Value.Unknown"/>, for a write whose path
+    /// could not be read.</summary>
+    private static void Poison(MemberExpression target, Scope scope)
+    {
+        for (Node node = target; ; )
+        {
+            if (node is MemberExpression hop) { node = hop.Object; continue; }
+            // Only an object this compiler reads values out of. `el[name] = x` on an element
+            // leaves the element the same element.
+            if (node is Identifier root && scope.Lookup(root.Name) is Value.Bag or Value.List)
+                scope.Set(root.Name, new Value.Unknown(
+                    $"'{root.Name}' was written through at a key this compiler could not resolve, "
+                    + "so no value read out of it afterwards can be trusted"));
+            return;
+        }
+    }
+
+    /// <summary>
+    /// Whether a write through this value changes what the value IS, and if so what it becomes.
+    ///
+    /// <para>Three outcomes, and the third is the one the first version got wrong. True with a
+    /// value: a bag with that path replaced. True with null: something mutable this cannot
+    /// rebuild, so the binding must be poisoned. <b>False: the write does not change what the name
+    /// refers to at all</b>, and the binding is left exactly as it is.</para>
+    ///
+    /// <para>That last case is most of the writes in this corpus. <c>card.style.opacity = "0.5"</c>
+    /// sets a style on an element; <c>card</c> is a <see cref="Value.Selector"/> and still names
+    /// the same element afterwards. Poisoning it cost mk-background both its size tweens, because
+    /// the target stopped resolving - the regression that found this. The same goes for a write
+    /// onto a timeline, a function, or a primitive, where JavaScript either ignores it or it is
+    /// nothing to do with the value this compiler holds.</para>
+    /// </summary>
+    private static bool Rebuilt(Value current, List<string> keys, int at, Value value,
+        out Value? built)
+    {
+        built = null;
+
+        if (at == keys.Count)
+        {
+            built = value;
+            return true;
+        }
+
+        // A list written into at an index: knowable in principle, and not worth the machinery for
+        // how rarely this corpus does it. The binding stops being trustworthy.
+        if (current is Value.List) return true;
+
+        if (current is not Value.Bag bag) return false;
+
+        var next = bag.Of.TryGetValue(keys[at], out var held) ? held : new Value.Nothing();
+
+        if (!Rebuilt(next, keys, at + 1, value, out var inner)) return false;
+        if (inner is null) return true;
+
+        built = new Value.Bag(new Dictionary<string, Value>(bag.Of) { [keys[at]] = inner });
+        return true;
     }
 
     /// <summary>A compound assignment folded, where both sides are known.</summary>
@@ -995,6 +1131,7 @@ internal sealed class Reader
             if (node is not CallExpression call || _handled.Contains(call)) continue;
             if (call.Callee is not MemberExpression { Property: Identifier verb }) continue;
             if (!MotionVerbs.Contains(verb.Name)) continue;
+            if (!Motion(call)) continue;
             if (Decided(call, parents)) continue;
 
             var key = (verb.Name, Because(call, parents));
@@ -1008,6 +1145,50 @@ internal sealed class Reader
                 $"{count} .{verb}() call(s) {cause}. Their motion is not carried, and neither is "
                 + "the TIME they occupy, so anything appended after them on the same timeline "
                 + "runs early", line));
+    }
+
+    /// <summary>
+    /// Whether <c>X.to(...)</c> is plausibly a tween at all, rather than something that happens to
+    /// share a method name with one.
+    ///
+    /// <para>This was reporting 37 refused tweens across 9 blocks that are not tweens.
+    /// <c>to</c>, <c>set</c>, <c>from</c> and <c>fromTo</c> are four of the most ordinary method
+    /// names in JavaScript, and nine of these compositions drive a three.js scene:
+    /// <c>group.rotation.set(0, y, 0)</c>, <c>camera.position.set(...)</c>,
+    /// <c>Float32Array.from(points)</c>. Every one was counted as motion this compiler had
+    /// dropped. A report that invents losses is as bad as one that hides them, and this is the
+    /// worse direction of the two for anybody deciding whether a block is worth carrying.</para>
+    ///
+    /// <para>The discriminator is the receiver, and it is deliberately generous. A tween's
+    /// receiver is <c>gsap</c> or a name bound to a timeline, so a chain that mentions either is
+    /// motion. A BARE name this walk never resolved is motion too - a timeline built inside a
+    /// function the walker could not follow still has to be reported, and that is the direction to
+    /// err in. What this excludes is only a receiver that is a property of something else and
+    /// mentions no timeline anywhere in its chain, which no GSAP call in this corpus is and every
+    /// three.js call is.</para>
+    /// </summary>
+    private bool Motion(CallExpression call)
+    {
+        if (call.Callee is not MemberExpression { Object: var receiver }) return false;
+
+        // Every one of these verbs takes a TARGET and a vars object - `.to(target, vars)`,
+        // `.fromTo(target, from, to)` - so one argument is not a tween whatever the receiver is.
+        // This is what tells `Float32Array.from(points)` from `tl.from(".a", {...})`, and it is a
+        // fact about GSAP's API rather than a guess about naming.
+        if (call.Arguments.Count < 2) return false;
+
+        // `tl.to(...)`, and equally a name this walk never worked out.
+        if (receiver is Identifier) return true;
+
+        // `window.gsap.to(...)`, `refs.tl.to(...)`: a chain is motion if a timeline is named
+        // anywhere in it.
+        for (var node = receiver; node is MemberExpression hop; node = hop.Object)
+        {
+            if (hop.Property is Identifier named && _timelines.Contains(named.Name)) return true;
+            if (hop.Object is Identifier root && _timelines.Contains(root.Name)) return true;
+        }
+
+        return false;
     }
 
     /// <summary>Whether a call sits inside a subtree the walk decided does not run. Climbing is

@@ -57,6 +57,14 @@ internal static class Emit
         // inventing one at the origin would collapse the shape to a corner. A tween that needs
         // to know where a point started is refused, the way a tween of a size is.
         _ when Properties.IsPolygonPoint(component) => null,
+        // Every filter function has an identity - no blur, full brightness - so a tween TO a
+        // filter never has to be refused for want of a start. That is what makes a blur-in
+        // carryable without reading the document.
+        _ when Properties.IsFilter(component) => Filter.Resting(component),
+        // An unpositioned element paints in document order, which among siblings is what
+        // `z-index: 0` means. A tween TO a stacking order therefore starts from the bottom of the
+        // stack, which is what bringing a card to the front means.
+        "z-index" => 0,
         _ => Properties.Identity(component),
     };
 
@@ -93,6 +101,21 @@ internal static class Emit
             // is every one in this corpus, since the script sets it once from the path's own
             // length - is written beside the animation instead of inside it.
             var dash = Hoist(properties, "stroke-dasharray");
+
+            // A filter function that never leaves its identity contributes nothing but a layer.
+            // `filter: none` decomposes to every function at its identity - which it has to, so a
+            // tween TO a blur has a zero to travel from - and without this a blur-out wrote
+            // `blur(0px) brightness(1) saturate(1) contrast(1) grayscale(0) opacity(1)` at every
+            // stop. Correct, and five no-op functions wide.
+            foreach (var component in Properties.FilterOrder)
+            {
+                if (!properties.TryGetValue(component, out var stops)) continue;
+                if (Varies(stops)) continue;
+                if (Filter.Resting(component) is not { } identity) continue;
+                if (stops.Count > 0 && Math.Abs(stops[0].Number - identity) > 1e-9) continue;
+
+                properties.Remove(component);
+            }
 
             var moving = properties.Values.Any(stops => stops.Any(s => s.Time > 0));
 
@@ -472,10 +495,34 @@ internal static class Emit
             parts.Add("clip-path: inset(" + string.Join(" ", edges) + ")");
         }
 
+        // The filter functions, back into one declaration, in list order. Only the tracked ones
+        // are written, which is right: an absent function in a filter list is its own identity, so
+        // a blur-only tween produces `filter: blur(4px)` rather than a list of no-ops.
+        var filters = Properties.FilterOrder
+            .Where(properties.ContainsKey)
+            .Select(component =>
+            {
+                var (number, unit) = At(properties[component], time);
+                return $"{Filter.Function(component)}({Number(number)}{unit})";
+            })
+            .ToList();
+
+        if (filters.Count > 0) parts.Add("filter: " + string.Join(" ", filters));
+
         foreach (var (component, stops) in properties)
         {
-            if (Properties.IsTransform(component) || Properties.IsClip(component)) continue;
+            if (Properties.IsAssembled(component)) continue;
             var (number, unit) = At(stops, time);
+
+            // z-index is an integer, and CSS interpolates integers by rounding. Writing 1.3333
+            // between a 1 and a 2 would be a value no stacking context has.
+            if (component == "z-index")
+            {
+                parts.Add($"z-index: {Math.Round(number, MidpointRounding.AwayFromZero)
+                    .ToString("F0", System.Globalization.CultureInfo.InvariantCulture)}");
+                continue;
+            }
+
             parts.Add($"{component}: {Number(number)}{unit}");
         }
 

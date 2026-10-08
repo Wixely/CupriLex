@@ -1,0 +1,629 @@
+{
+  "engine": "0.39.0",
+  "platform": "Win32NT",
+  "runtime": "10.0.10",
+  "measured": "2026-10-08T15:40:23.5222602+00:00",
+  "support": [
+    {
+      "property": "width",
+      "value": "120px -\u003E 400px",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "height",
+      "value": "80px -\u003E 160px",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "opacity",
+      "value": "0.25",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translateX(80px)",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "left",
+      "value": "80px",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "margin-left",
+      "value": "80px",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "background-color",
+      "value": "#d9642a -\u003E #3f6fd8",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "color",
+      "value": "#d9642a -\u003E #3f6fd8",
+      "parses": true,
+      "paints": true,
+      "animates": false,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "inset(0 40% 0 0)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "blur(6px)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "brightness(0.4)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "backdrop-filter",
+      "value": "blur(6px)",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0051: backdrop-filter only frosts what is behind a TOP-LAYER element (a dialog, drawer or sheet). On an ordinary element it parses and paints nothing."
+      ]
+    },
+    {
+      "property": "mix-blend-mode",
+      "value": "difference",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027mix-blend-mode\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "display",
+      "value": "grid",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "rotateY(50deg)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translate3d(60px,20px,0)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "perspective",
+      "value": "400px on the parent of a rotateX(45deg) child",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "box-shadow",
+      "value": "0 10px 30px #000",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "text-shadow",
+      "value": "0 4px 8px #000",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027text-shadow\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "gap",
+      "value": "0 -\u003E 24px",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "align-self",
+      "value": "center",
+      "parses": false,
+      "paints": false,
+      "diagnostics": [
+        "CF0050: CSS property \u0027align-self\u0027 is not supported and was ignored."
+      ]
+    },
+    {
+      "property": "\u003Csvg\u003E",
+      "value": "inline rect",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "letter-spacing",
+      "value": "12px",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "line-height",
+      "value": "72px",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "repeating-linear-gradient",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "linear-gradient",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border-left",
+      "value": "8px solid",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r, g, b, a)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "border",
+      "value": "1px solid rgba(r,g,b,a)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (shorthand)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (four longhands)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "inset",
+      "value": "0 (percent size)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "descendant (.box .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "id (#p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "compound (.p.q)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "child (.box \u003E .p)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "selector",
+      "value": "animation via descendant",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "animation",
+      "value": "beats a static declaration",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "fractional percentages",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@keyframes",
+      "value": "many stops",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "text colour, alpha 0.65",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "truncated alpha, should match",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "rgba vs hex",
+      "value": "background, alpha 0.65",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "animation-delay",
+      "value": "calc(var(--d) \u002B 0.5s)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@font-face",
+      "value": "WOFF 2, registered face",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translateX \u002B an unsupported skewX",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "skewX(20deg) alone",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "@font-face",
+      "value": "src: data: URI",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "translateX(-50%)",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "top",
+      "value": "50% in an unsized static parent",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "top",
+      "value": "50% in a sized static parent",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "margin-left",
+      "value": "80px, on position:absolute",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "::after",
+      "value": "content:\u0027\u0027 with a size and a background",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "::before",
+      "value": "content:\u0027\u0027 with a size and a background",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E child",
+      "value": "stylesheet opacity:0 on a rect",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E",
+      "value": "stylesheet opacity:0 on the root",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E child",
+      "value": "opacity=\u00220\u0022 attribute on a rect",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@font-face",
+      "value": "variable wght axis, 700 vs 400",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "text-transform",
+      "value": "uppercase",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "background-size",
+      "value": "50% 100% on a gradient",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "gradient \u002B no-repeat, shorthand",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E text",
+      "value": "\u003Ctext\u003E inside an inline svg",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E fill",
+      "value": "url(#gradient) on a rect",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E stroke",
+      "value": "stroke-dashoffset hides half a line",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "overflow",
+      "value": "hidden clips a translated child",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "overflow",
+      "value": "hidden clips a scaled child",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "circle(30%)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "polygon(...)",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "backface-visibility",
+      "value": "hidden, face rotated 180deg",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "inset() animated, wipe",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "blur animated",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "transform",
+      "value": "rotateY animated",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    },
+    {
+      "property": "clip-path",
+      "value": "inset(), 0 vs 0% mid-wipe, should match",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "gradient stop",
+      "value": "1px, should match 0.5% of a 200px line",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "radial-gradient",
+      "value": "at 20% 20% vs at 80% 80%",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "radial-gradient",
+      "value": "default shape vs explicit circle",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "background",
+      "value": "two image layers vs one",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "gradient stop",
+      "value": "transparent vs the same colour at alpha 0",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "animation",
+      "value": "two, comma-separated, vs their end state",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "animation",
+      "value": "two via longhand lists, vs their end state",
+      "parses": true,
+      "paints": false,
+      "diagnostics": []
+    },
+    {
+      "property": "z-index",
+      "value": "a lower z-index puts an element behind",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "filter",
+      "value": "blur(12px) in a rule, for contrast with the keyframe",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "@import",
+      "value": "does not swallow the rule after it",
+      "parses": false,
+      "paints": true,
+      "diagnostics": [
+        "CF0052: @import is not fetched \u2014 the engine steps over it, so the stylesheet it names never loads."
+      ]
+    },
+    {
+      "property": "hidden",
+      "value": "attribute on a div with text",
+      "parses": true,
+      "paints": true,
+      "diagnostics": []
+    },
+    {
+      "property": "\u003Csvg\u003E stroke",
+      "value": "stroke-dashoffset animated, draw-on",
+      "parses": true,
+      "paints": true,
+      "animates": true,
+      "diagnostics": []
+    }
+  ]
+}

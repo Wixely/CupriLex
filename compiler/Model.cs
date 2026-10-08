@@ -91,6 +91,11 @@ internal static partial class Properties
         // has animated them since 0.35.0 (#262). 36 tweens across 10 blocks.
         ["strokeDashoffset"] = ("stroke-dashoffset", ""),
         ["strokeDasharray"] = ("stroke-dasharray", ""),
+        // Painting order among siblings, honoured since CupriFace 0.39.0 (#290) - this repository
+        // filed it after measuring that 258 declarations across 71 blocks did nothing at all,
+        // silently. 32 tweens across 9 blocks, and every corpus value is a small integer set
+        // outright: a card brought to the front of a stack, never a slide from 1 to 10.
+        ["zIndex"] = ("z-index", ""),
     };
 
     /// <summary>The transform components, in the order they are written out. Fixed, because
@@ -111,6 +116,18 @@ internal static partial class Properties
 
     public static bool IsClip(string name) => ClipOrder.Contains(name) || IsPolygonPoint(name);
 
+    /// <summary>The filter functions, in the order they are written back out. See
+    /// <see cref="Filter"/>: a filter list applies in sequence, so the order is fixed for the same
+    /// reason the transform components' is.</summary>
+    public static readonly string[] FilterOrder = Filter.Order;
+
+    public static bool IsFilter(string name) => Filter.Is(name);
+
+    /// <summary>A property whose components are assembled into one declaration rather than written
+    /// one per line. Three families now, and the emitter asks this rather than listing them.</summary>
+    public static bool IsAssembled(string name) =>
+        IsTransform(name) || IsClip(name) || IsFilter(name);
+
     /// <summary>A point of a <c>clip-path: polygon()</c>, as <c>clipP3x</c>. Generated rather
     /// than listed because the point count is the author's: the corpus writes polygons of 4 and
     /// of 9 points, and a fixed table would cap what can be carried at whatever was typed out.</summary>
@@ -130,6 +147,13 @@ internal static partial class Properties
         {
             cssName = gsapName;
             unit = "%";
+            return true;
+        }
+
+        if (IsFilter(gsapName))
+        {
+            cssName = gsapName;
+            unit = Filter.Unit(gsapName);
             return true;
         }
 

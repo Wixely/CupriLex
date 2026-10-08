@@ -1026,6 +1026,20 @@ internal sealed class Reader
             // and 55 of the corpus's 57 clip-path values are one of them. The remaining two are
             // circle(), which has no decomposition that interpolates into the others, and are
             // refused with the shape named.
+            // filter, decomposed per function. The engine has animated it since 0.39.0 (#291),
+            // and like clip-path the value is a shape-ish thing rather than a number: a list of
+            // calls, each of which IS a number once taken apart. See Filter.
+            if (name == "filter")
+            {
+                if (!Filter.Read(value.AsText ?? string.Empty, amounts))
+                    refused.Add(new Refusal(
+                        $"'filter' on '{selector}': blur, brightness, saturate, contrast, "
+                        + "grayscale, opacity and none reduce to numbers this can interpolate, and "
+                        + $"nothing else does, so a tween of `{value.AsText ?? "a value that is not "
+                        + "a string"}` would run and change nothing", line));
+                continue;
+            }
+
             if (name == "clipPath")
             {
                 if (!Clip.Read(value.AsText ?? string.Empty, amounts))

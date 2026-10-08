@@ -1189,4 +1189,119 @@ public class CompilerTests
 
         Assert.Contains("translateX(100px)", css);
     }
+
+    // ---- filter, as numbers ----------------------------------------------------------------------
+    // The engine has animated it since CupriFace 0.39.0 (#291), filed from this corpus after
+    // measuring that it painted statically and never moved. 104 tweens across 16 blocks, and 92 of
+    // the corpus's filter values are a single blur().
+
+    [Fact]
+    public void A_blur_tween_becomes_a_filter_keyframe()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.fromTo(".a", { filter: "blur(20px)" }, { filter: "blur(0px)", duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("filter: blur(20px)", css);
+        Assert.Contains("filter: blur(0px)", css);
+    }
+
+    /// <summary>`none` is every function at its identity, which is what gives a tween TO a blur a
+    /// zero to travel from. 38 corpus values are `none`.</summary>
+    [Fact]
+    public void A_tween_to_a_blur_starts_from_no_blur()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { filter: "blur(8px)", duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("filter: blur(0px)", css);
+        Assert.Contains("filter: blur(8px)", css);
+    }
+
+    /// <summary>And the other way: a function that never leaves its identity is dropped, so a
+    /// blur-out does not write five no-op functions beside the one that moves.</summary>
+    [Fact]
+    public void A_filter_function_that_never_moves_is_not_written()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.fromTo(".a", { filter: "blur(8px)" }, { filter: "none", duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("filter: blur(8px)", css);
+        Assert.DoesNotContain("saturate", css);
+        Assert.DoesNotContain("grayscale", css);
+    }
+
+    [Fact]
+    public void Two_filter_functions_keep_their_order()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.fromTo(".a", { filter: "blur(0px) brightness(1)" },
+                { filter: "blur(6px) brightness(1.5)", duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("filter: blur(6px) brightness(1.5)", css);
+    }
+
+    /// <summary>`brightness(150%)` and `brightness(1.5)` are the same filter, and only one of them
+    /// interpolates against a bare number.</summary>
+    [Fact]
+    public void A_ratio_in_percent_becomes_the_ratio()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { filter: "brightness(150%)", duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("filter: brightness(1.5)", css);
+    }
+
+    [Fact]
+    public void A_filter_function_that_is_not_numbers_is_refused_with_the_value_quoted()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { filter: "drop-shadow(0 0 2px black)", duration: 1 });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("drop-shadow(0 0 2px black)", StringComparison.Ordinal));
+        Assert.DoesNotContain("filter:", compiled.Motion.Css);
+    }
+
+    // ---- z-index ---------------------------------------------------------------------------------
+    // Honoured among siblings since CupriFace 0.39.0 (#290), filed from this corpus after measuring
+    // that 258 declarations across 71 blocks did nothing at all, silently.
+
+    [Fact]
+    public void A_stacking_order_set_outright_is_carried()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.set(".a", { zIndex: 2 });
+            tl.to(".a", { opacity: 0, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("z-index: 2", css);
+    }
+
+    /// <summary>CSS interpolates an integer by rounding, and 1.3333 is a value no stacking context
+    /// has.</summary>
+    [Fact]
+    public void A_stacking_order_is_written_as_a_whole_number()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { zIndex: 3, duration: 1, ease: "none" });
+            """);
+
+        Assert.DoesNotContain("z-index: 1.", css);
+        Assert.DoesNotContain("z-index: 2.", css);
+        Assert.Contains("z-index: 3", css);
+    }
 }

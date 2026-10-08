@@ -30,24 +30,46 @@ The shape of it: resolve every tween to an **absolute time** on the composition'
 target element, and emit one `@keyframes` per element with stops at the percentages those times
 fall at.
 
-Four constraints from the engine make this harder than it sounds, and all four are load-bearing:
+Four constraints from the engine made this harder than it sounds. **One of the four is gone as of
+CupriFace 0.38.0, and it was the one that shaped everything else.**
 
-1. **One animation per element.** The engine runs exactly one; a comma-separated list runs
-   *neither*, silently. So every tween touching the same element must be merged into a single
-   `@keyframes`, with stops ordered by time — a tween that starts before another ends has to be
-   resolved into one timeline of stops, not two animations.
-2. **Only `width`, `height`, `opacity` and `transform` animate.** GSAP animates anything. A tween
-   on `left`, `top`, `margin`, `color` or `backgroundColor` must be rewritten — position into
-   `transform: translate`, and colour cross-faded between two stacked elements or refused.
+1. ~~**One animation per element.**~~ **Lifted in CupriFace 0.38.0 (#284).** The engine ran exactly
+   one, and a comma-separated list ran *neither*, silently — so every tween touching an element
+   had to be merged into a single `@keyframes` with stops ordered by time. An element can now carry
+   a list: `animation` parses one entry per comma, the six longhands pair by index with the shorter
+   repeating, and every entry runs and composes with the last to touch a property winning. The
+   matrix records the change as two should-match rows going `yes` → `NO`.
+
+   **The compiler has not been rewritten to use it, and the reason is the composing rule.** Last to
+   touch a property wins outright rather than blending, and `transform` is one property however
+   many components a tween moves. Two animations both touching `transform` at different times
+   fight: with `both` fill the later one's held start value overrides the earlier one's end value
+   from frame zero, and with no fill the earlier one snaps back the moment it ends. So merging is
+   still right for every property two tweens share. Where it stops being necessary is a property
+   only ONE tween touches — and that is the case worth having, because it is what makes
+   constraint 4 go away for that tween. See below.
+2. **Only `width`, `height`, `opacity`, `transform`, `clip-path`, `filter` and the stroke dash
+   properties animate.** GSAP animates anything. A tween on `left`, `top`, `margin`, `color` or
+   `backgroundColor` must be rewritten — position into `transform: translate`, and colour
+   cross-faded between two stacked elements or refused. The list grows as the engine learns; naming
+   it in the refusal is what makes a stale refusal visible.
 3. **`calc()` in `animation-delay` is treated as zero.** Stagger goes in the keyframe percentages.
 4. **Timing functions are honoured**, so `parseEase` maps to `cubic-bezier()` — but a per-tween
    ease inside a merged `@keyframes` cannot be expressed, because `animation-timing-function`
    applies per-animation. Either approximate with denser stops or refuse.
 
-Constraint 1 and constraint 4 interact badly and that is the real difficulty of this compiler.
-**Settled:** the curve is evaluated in the compiler and sampled into stops, and the animation
-itself runs `linear`. Eight stops per eased tween, which is a round number and not yet a measured
-one — the comparison harness is what should decide it. See [COMPILER.md](COMPILER.md).
+Constraint 1 and constraint 4 interacted badly and that was the real difficulty of this compiler.
+**Settled, and still in force:** the curve is evaluated in the compiler and sampled into stops, and
+the animation itself runs `linear`. Eight stops per eased tween, which is a round number and not
+yet a measured one — the comparison harness is what should decide it. See
+[COMPILER.md](COMPILER.md).
+
+**What 0.38.0 opens, not yet taken:** an element whose tweens touch disjoint properties — one on
+`opacity` with `power2.out`, one on `transform` with `elastic` — can become two animations, each
+carrying its true ease as `animation-timing-function` instead of eight sampled stops. That is an
+exact curve where there is currently an eight-point approximation of one. It is a real piece of
+work rather than a flag, because the grouping has to be per property and the merged path has to
+stay for every property two tweens share.
 
 ### Everything else
 

@@ -79,6 +79,10 @@ internal sealed class Reader
     /// <see cref="Unreached"/>, to tell a motion call from something that merely shares a method
     /// name with one.</summary>
     private readonly HashSet<string> _timelines = ["gsap"];
+
+    /// <summary>Callback bodies to walk once the synchronous pass is done, in the order they would
+    /// run. See <see cref="Defer"/>.</summary>
+    private readonly List<(Value.Routine Body, Scope Scope)> _deferred = [];
     private int _scriptLine;
     private string _scriptSource = "";
 
@@ -98,6 +102,7 @@ internal sealed class Reader
             reader._scriptLine = script.Line;
             reader._scriptSource = script.Source;
             reader.Statements(script.Tree.Body, scope);
+            reader.Drain();
             reader.Unreached(script.Tree);
         }
 
@@ -398,6 +403,9 @@ internal sealed class Reader
             case CallExpression each when Each(each, scope):
                 break;
 
+            case CallExpression promised when Defer(promised, scope):
+                break;
+
             case CallExpression call:
                 Call(call, scope);
                 break;
@@ -559,6 +567,75 @@ internal sealed class Reader
         built = new Value.Bag(new Dictionary<string, Value>(bag.Of) { [keys[at]] = inner });
         return true;
     }
+
+    /// <summary>
+    /// <c>fetch(url).then(r =&gt; r.json()).then(data =&gt; { ...tweens... })</c>: the callback body
+    /// is queued to be walked AFTER the synchronous pass, which is when it runs.
+    ///
+    /// <para>us-map is the shape, and it is common: a composition fetches its data, then builds its
+    /// whole timeline inside the callback. The walker bound <c>buildTimeline</c> as a routine and
+    /// never reached the call, so 76 tweens across 18 blocks were reported as being in the body of
+    /// a function nothing called - which was true, and not the useful half of the truth.</para>
+    ///
+    /// <para><b>Why deferring is order-faithful rather than a guess.</b> A <c>.then()</c> callback
+    /// cannot run until the synchronous script has finished - that is what the microtask queue
+    /// means - so walking it after all top-level statements is exactly the order the browser used
+    /// to produce the reference frames. Walking it in place would have been the guess: the clock
+    /// would be wherever the fetch happens to sit in the source rather than at the end, and every
+    /// tween appended without an explicit position would land early.</para>
+    ///
+    /// <para>A chain runs inner-first, so the receiver is walked before this callback is queued.
+    /// The callback's parameter is the resolved value, which is not knowable, and is bound to
+    /// <see cref="Value.Unknown"/> by name: a tween that depends on fetched data is then refused
+    /// one at a time by the machinery that already does that, and a tween that does not - the
+    /// headline wipe, the subtitle fade - is carried.</para>
+    /// </summary>
+    private bool Defer(CallExpression call, Scope scope)
+    {
+        if (call.Callee is not MemberExpression { Property: Identifier { Name: "then" } } member)
+            return false;
+
+        // The receiver first: `a().then(x).then(y)` runs x before y, and the receiver of the outer
+        // call is the inner one.
+        if (member.Object is CallExpression earlier) Effect(earlier, scope);
+
+        if (call.Arguments.Count == 0 || Routine(call.Arguments[0]) is not Value.Routine body)
+            return true;
+
+        _deferred.Add((body, scope));
+        return true;
+    }
+
+    /// <summary>
+    /// The queued callbacks, walked in order.
+    ///
+    /// <para>A queue rather than recursion because a callback may itself chain another
+    /// <c>.then()</c>, and that one runs after everything already waiting - so appending while
+    /// draining is correct and the loop has to re-read the count each time.</para>
+    /// </summary>
+    private void Drain()
+    {
+        for (var at = 0; at < _deferred.Count && at < MostDeferred; at++)
+        {
+            var (body, outer) = _deferred[at];
+            var inner = new Scope(outer);
+
+            // The resolved value. Named so the refusal for a tween that depends on it says which
+            // binding to look at.
+            foreach (var parameter in body.Parameters)
+                if (parameter is Identifier named)
+                    inner.Bind(named.Name, new Value.Unknown(
+                        $"'{named.Name}', the value a promise resolved to, which is not knowable "
+                        + "without running the page"));
+
+            _handled.Add(body.Body);
+            Statement(body.Body, inner);
+        }
+    }
+
+    /// <summary>How many deferred callbacks this will walk. A guard against a chain that builds
+    /// itself, not a limit anything in this corpus comes near - the largest is four.</summary>
+    private const int MostDeferred = 64;
 
     /// <summary>A compound assignment folded, where both sides are known.</summary>
     private static Value Compound(AssignmentExpression node, Value current, Value operand)

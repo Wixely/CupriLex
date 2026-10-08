@@ -872,23 +872,26 @@ public class CompilerTests
         var compiled = Compile("""
             const tl = gsap.timeline();
             function buildTimeline() { tl.to(".a", { x: 100, duration: 1 }); }
-            fetch("/x").then(function () { buildTimeline(); });
+            document.addEventListener("click", function () { buildTimeline(); });
             """);
 
         Assert.Contains(compiled.Refusals,
             r => r.What.Contains("`buildTimeline()`", StringComparison.Ordinal));
     }
 
+    /// <summary>A <c>.catch()</c> runs only when the promise rejects, and the browser that produced
+    /// the reference frames did not reject - so it is named rather than followed. A
+    /// <c>.then()</c> IS followed; see the deferred-callback tests below.</summary>
     [Fact]
     public void An_unfollowed_promise_callback_names_what_it_was_waiting_on()
     {
         var compiled = Compile("""
             const tl = gsap.timeline();
-            document.fonts.ready.then(function () { tl.to(".a", { x: 100, duration: 1 }); });
+            document.fonts.ready.catch(function () { tl.to(".a", { x: 100, duration: 1 }); });
             """);
 
         Assert.Contains(compiled.Refusals,
-            r => r.What.Contains(".then() callback on `document.fonts.ready`", StringComparison.Ordinal));
+            r => r.What.Contains(".catch() callback on `document.fonts.ready`", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -910,7 +913,7 @@ public class CompilerTests
     {
         var compiled = Compile("""
             const tl = gsap.timeline();
-            document.fonts.ready.then(function () {
+            document.fonts.ready.catch(function () {
               document.querySelectorAll(".x").forEach(function (el) {
                 tl.to(el, { x: 100, duration: 1 });
               });
@@ -920,7 +923,7 @@ public class CompilerTests
         Assert.Contains(compiled.Refusals,
             r => r.What.Contains(".forEach() over", StringComparison.Ordinal));
         Assert.DoesNotContain(compiled.Refusals,
-            r => r.What.Contains(".then() callback", StringComparison.Ordinal));
+            r => r.What.Contains(".catch() callback", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1303,5 +1306,72 @@ public class CompilerTests
         Assert.DoesNotContain("z-index: 1.", css);
         Assert.DoesNotContain("z-index: 2.", css);
         Assert.Contains("z-index: 3", css);
+    }
+
+    // ---- a promise callback, walked after the synchronous pass -----------------------------------
+    // us-map's shape, and a common one: a composition fetches its data and builds its whole
+    // timeline inside the callback. The walker bound `buildTimeline` as a routine and never reached
+    // the call, so 76 tweens across 18 blocks were reported as being in the body of a function
+    // nothing called - true, and not the useful half of the truth.
+
+    [Fact]
+    public void A_timeline_built_inside_a_then_callback_is_carried()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            fetch("/data.json").then(function (data) {
+              tl.to(".a", { x: 100, duration: 1, ease: "none" }, 0);
+            });
+            """);
+
+        Assert.Contains("translateX(100px)", css);
+    }
+
+    [Fact]
+    public void A_function_called_from_a_then_callback_is_followed_into()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            function build() { tl.to(".a", { x: 100, duration: 1, ease: "none" }, 0); }
+            fetch("/x").then((r) => r.json()).then(function (d) { build(); });
+            """);
+
+        Assert.Contains("translateX(100px)", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("`build()`", StringComparison.Ordinal));
+    }
+
+    /// <summary>Deferred, not walked in place. A callback cannot run until the synchronous script
+    /// has finished, so its tweens come after the top-level ones on the clock - and walking it
+    /// where it is written would put them wherever the fetch happens to sit in the source.</summary>
+    [Fact]
+    public void A_deferred_callbacks_tweens_land_after_the_synchronous_ones()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            fetch("/x").then(function () { tl.to(".a", { x: 50, duration: 1, ease: "none" }); });
+            tl.to(".a", { x: 10, duration: 1, ease: "none" });
+            """);
+
+        // The appended tween runs 0-1s and the deferred one 1-2s, so at the halfway stop the
+        // element is at 10px rather than on its way to 50.
+        Assert.Contains("50% { transform: translateX(10px); }", css);
+    }
+
+    /// <summary>The resolved value is not knowable, and a tween that depends on it is refused by
+    /// the machinery that already does that - one at a time, naming the binding, while the tweens
+    /// that do not depend on it are carried.</summary>
+    [Fact]
+    public void A_tween_depending_on_the_resolved_value_is_refused_and_the_rest_carried()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            fetch("/x").then(function (d) {
+              tl.to(".a", { x: 100, duration: 1, ease: "none" }, 0);
+              tl.to(".b", { x: d.offset, duration: 1, ease: "none" }, 0);
+            });
+            """, """<div class="a"></div><div class="b"></div>""");
+
+        Assert.Contains("translateX(100px)", compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("not a plain number", StringComparison.Ordinal));
     }
 }

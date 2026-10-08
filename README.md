@@ -38,6 +38,14 @@ Reproduce these numbers with `python tools/survey.py` — see [docs/CORPUS.md](d
 
 ---
 
+**Not every block can be reached, and the ones that cannot are counted rather than averaged into
+the total.** 84 of the 172 measured blocks build their DOM in JavaScript or draw their picture into
+a canvas; the 81 that are actually translatable average 62.6%. See
+[docs/UNFIXABLE.md](docs/UNFIXABLE.md), which also keeps the list of things that looked unfixable
+and turned out to be work.
+
+---
+
 ## What has to happen, in order
 
 1. **Know what the engine supports**, mechanically, per version — `conformance/`. Without this the

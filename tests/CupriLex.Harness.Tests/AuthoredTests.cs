@@ -231,4 +231,27 @@ public class AuthoredTests
 
         Assert.DoesNotContain("translateX(-50px)", css);
     }
+
+    // ---- the draw-on idiom ---------------------------------------------------------------------
+
+    [Fact]
+    public void A_stroke_dashoffset_in_the_cascade_is_the_start_of_a_tween()
+    {
+        var authored = Of(".c { stroke-dasharray: 1000; stroke-dashoffset: 1000; }",
+            """<svg><path class="c"/></svg>""");
+
+        Assert.Equal(new Amount(1000, ""), authored.Value(".c", "stroke-dashoffset"));
+        Assert.Equal(new Amount(1000, ""), authored.Value(".c", "stroke-dasharray"));
+    }
+
+    /// <summary>The shape flowchart writes: one tween over a comma-separated list of selectors.
+    /// Both match elements the same rule styles, so the start is agreed and knowable.</summary>
+    [Fact]
+    public void A_selector_list_whose_elements_agree_gives_the_start_value()
+    {
+        var authored = Of(".c { stroke-dashoffset: 1000; }",
+            """<svg><path class="c" id="a"/><path class="c" id="b"/></svg>""");
+
+        Assert.Equal(new Amount(1000, ""), authored.Value(".c#a, .c#b", "stroke-dashoffset"));
+    }
 }

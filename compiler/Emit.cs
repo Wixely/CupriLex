@@ -44,6 +44,11 @@ internal static class Emit
     {
         "width" or "height" => null,
         "opacity" => 1,
+        // Both are 0 in CSS before anything touches them, and a dash array of 0 is an undashed
+        // stroke - so a path that is dashed and wound on by a script starts where it would have
+        // started anyway. That is what makes the draw-on idiom carryable without reading the
+        // document: the resting state is the solid line.
+        "stroke-dashoffset" or "stroke-dasharray" => 0,
         _ => Properties.Identity(component),
     };
 
@@ -72,13 +77,29 @@ internal static class Emit
 
         foreach (var (selector, properties) in tracks)
         {
+            // Measured on 0.37.0: `stroke-dasharray` inside a @keyframes is ignored, and an
+            // undashed stroke has nothing for `stroke-dashoffset` to wind, so the whole draw-on
+            // renders as a finished line at every instant. The same declaration in an ordinary
+            // rule works, and then the animated offset draws the path on exactly as authored
+            // (0 -> 3000 -> 6000 ink across a 2s line). So a dash array that never varies - which
+            // is every one in this corpus, since the script sets it once from the path's own
+            // length - is written beside the animation instead of inside it.
+            var dash = Hoist(properties, "stroke-dasharray");
+
             var moving = properties.Values.Any(stops => stops.Any(s => s.Time > 0));
+
+            if (properties.Count == 0)
+            {
+                // The dash array was all there was.
+                animations.Append($"{selector} {{ {dash}}}\n");
+                continue;
+            }
 
             if (!moving)
             {
                 // Nothing here moves: everything was set before the first frame. A static
                 // declaration says the same thing without spending the element's one animation.
-                animations.Append(Rule(selector, properties, 0));
+                animations.Append(Rule(selector, properties, 0, dash));
                 continue;
             }
 
@@ -108,7 +129,7 @@ internal static class Emit
             var name = "cuprilex-" + ++index;
             css.Append(Keyframes(name, properties, seconds));
             animations.Append(
-                $"{selector} {{ animation: {name} {Number(seconds)}s linear both; }}\n");
+                $"{selector} {{ {dash}animation: {name} {Number(seconds)}s linear both; }}\n");
 
             emitted.Add(selector);
             if (!still) animated.Add(selector);
@@ -345,8 +366,24 @@ internal static class Emit
         return css.Append("}\n").ToString();
     }
 
-    private static string Rule(string selector, Dictionary<string, List<Stop>> properties, double time) =>
-        $"{selector} {{ {Declarations(properties, time)} }}\n";
+    private static string Rule(
+        string selector, Dictionary<string, List<Stop>> properties, double time, string lead = "") =>
+        $"{selector} {{ {lead}{Declarations(properties, time)} }}\n";
+
+    /// <summary>
+    /// A property lifted out of the keyframes and returned as an ordinary declaration, when it
+    /// never varies. Empty when it varies, or is not there at all - a property that really does
+    /// change has to stay in the animation whatever the engine makes of it, because writing one
+    /// of its values as a constant would be a different composition rather than a worse one.
+    /// </summary>
+    private static string Hoist(Dictionary<string, List<Stop>> properties, string component)
+    {
+        if (!properties.TryGetValue(component, out var stops) || stops.Count == 0) return "";
+        if (Varies(stops)) return "";
+
+        properties.Remove(component);
+        return $"{component}: {Number(stops[0].Number)}{stops[0].Unit}; ";
+    }
 
     private static string Declarations(Dictionary<string, List<Stop>> properties, double time)
     {

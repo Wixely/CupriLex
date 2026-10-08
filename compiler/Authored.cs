@@ -1,4 +1,5 @@
-﻿using AngleSharp;
+﻿using System.Text.RegularExpressions;
+using AngleSharp;
 using AngleSharp.Css.Dom;
 using AngleSharp.Dom;
 
@@ -26,16 +27,20 @@ namespace CupriLex.Compiler;
 /// start value is an animation that runs from the wrong place, which is worse than one that does
 /// not run: the second is visible in the report and the first is not.</para>
 /// </summary>
-internal sealed class Authored
+internal sealed partial class Authored
 {
     private readonly IDocument _document;
     private readonly IReadOnlyList<ICssStyleRule> _rules;
     private readonly Dictionary<string, IReadOnlyDictionary<string, Amount>?> _cache = new();
 
-    private Authored(IDocument document, IReadOnlyList<ICssStyleRule> rules)
+    private readonly IReadOnlyList<(string Selector, string Body)> _raw;
+
+    private Authored(IDocument document, IReadOnlyList<ICssStyleRule> rules,
+        IReadOnlyList<(string, string)>? raw = null)
     {
         _document = document;
         _rules = rules;
+        _raw = raw ?? [];
     }
 
     /// <summary>Nothing known about anything. The behaviour before this type existed, and what a
@@ -54,7 +59,22 @@ internal sealed class Authored
             foreach (var sheet in document.StyleSheets.OfType<ICssStyleSheet>())
                 Collect(sheet.Rules, rules);
 
-            return new Authored(document, rules);
+            // The SVG presentation properties are not in AngleSharp.Css's property registry, so
+            // `stroke-dashoffset: 1000` is dropped at parse time and is absent from the object
+            // model AND from the rule's own CssText. The only place it survives is the stylesheet
+            // as written, so the rules are collected a second time as text. Images.Fit() reads
+            // object-fit the same way and for the same reason.
+            //
+            // Source order only, no specificity: these are read for one purpose - the start value
+            // of a draw-on - and a composition that states the same stroke twice at two
+            // specificities is not something this corpus does. The object model still wins where
+            // it has an answer.
+            var raw = new List<(string, string)>();
+            foreach (var style in document.QuerySelectorAll("style"))
+                foreach (Match block in Block().Matches(style.TextContent))
+                    raw.Add((block.Groups["sel"].Value.Trim(), block.Groups["body"].Value));
+
+            return new Authored(document, rules, raw);
         }
         catch
         {
@@ -151,7 +171,15 @@ internal sealed class Authored
     /// </summary>
     private Dictionary<string, Amount> Declared(IElement element)
     {
-        string? opacity = null, transform = null;
+        string? transform = null;
+
+        // The properties read straight through as a number, with the unit they carry. The stroke
+        // pair is here for the draw-on idiom: `flowchart` authors `stroke-dasharray: 1000;
+        // stroke-dashoffset: 1000` and tweens the offset to 0, so without reading the start the
+        // tween compiles from 0 to 0 and the path is drawn from the first frame. Like `opacity`,
+        // these are plain numbers in the cascade and in a presentation attribute both.
+        string?[] numbers = [null, null, null];
+        string[] names = ["opacity", "stroke-dashoffset", "stroke-dasharray"];
 
         // A presentation attribute on an SVG element - <path opacity="0">, the way every icon in
         // this corpus hides its second state - is a declaration at the bottom of the cascade, and
@@ -161,7 +189,8 @@ internal sealed class Authored
         // stylesheets inside an svg and a pink heart from frame zero on one that honours them.
         // The transform attribute is not read: its grammar is SVG's, not CSS's, and a wrong
         // reading of it is a wrong start position.
-        if (element.GetAttribute("opacity") is { Length: > 0 } presented) opacity = presented;
+        for (var i = 0; i < names.Length; i++)
+            if (element.GetAttribute(names[i]) is { Length: > 0 } presented) numbers[i] = presented;
 
         var applicable = _rules
             .Select((rule, order) => (rule, order))
@@ -171,27 +200,77 @@ internal sealed class Authored
 
         foreach (var (rule, _) in applicable)
         {
-            if (rule.Style.GetPropertyValue("opacity") is { Length: > 0 } o) opacity = o;
+            // GetPropertyValue first, then the declaration text. AngleSharp.Css knows the CSS
+            // property registry and the SVG presentation properties are not in it, so
+            // `stroke-dashoffset` comes back empty from the object model and has to be read off
+            // the rule as written - the same hand-parse the `style` attribute already needed.
+            for (var i = 0; i < names.Length; i++)
+                if (rule.Style.GetPropertyValue(names[i]) is { Length: > 0 } v) numbers[i] = v;
+
             if (rule.Style.GetPropertyValue("transform") is { Length: > 0 } t) transform = t;
+        }
+
+        // Then the stylesheet as written, for the properties the object model threw away.
+        foreach (var (selector, body) in _raw)
+        {
+            if (!MatchesText(element, selector)) continue;
+
+            for (var i = 0; i < names.Length; i++)
+                if (numbers[i] is null && Inline(body, names[i]) is { } v) numbers[i] = v;
         }
 
         if (element.GetAttribute("style") is { Length: > 0 } inline)
         {
-            if (Inline(inline, "opacity") is { } o) opacity = o;
+            for (var i = 0; i < names.Length; i++)
+                if (Inline(inline, names[i]) is { } v) numbers[i] = v;
+
             if (Inline(inline, "transform") is { } t) transform = t;
         }
 
         var values = new Dictionary<string, Amount>();
 
-        if (opacity is not null && double.TryParse(opacity.Trim(),
-                System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var alpha))
-            values["opacity"] = new Amount(alpha, "");
+        for (var i = 0; i < names.Length; i++)
+            if (Number(numbers[i]) is { } amount) values[names[i]] = amount;
 
         if (transform is not null) Transform.Read(transform, values);
 
         return values;
     }
+
+    /// <summary>A declared value that is a bare number, or one in px, and null for anything else.
+    /// A dash array of several lengths, a percentage opacity, a <c>var()</c>: all unreadable here,
+    /// and all answered with nothing rather than a guess.</summary>
+    private static Amount? Number(string? declared)
+    {
+        if (declared is null) return null;
+
+        var text = declared.Trim();
+        var unit = "";
+
+        if (text.EndsWith("px", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[..^2].Trim();
+            unit = "px";
+        }
+
+        return double.TryParse(text, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? new Amount(value, unit)
+            : null;
+    }
+
+    /// <summary>Whether an element matches a selector written as text. A selector the parser will
+    /// not take matches nothing, here as everywhere else in this file.</summary>
+    private static bool MatchesText(IElement element, string selector)
+    {
+        if (selector.Length == 0 || selector.StartsWith('@')) return false;
+
+        try { return element.Matches(selector); }
+        catch { return false; }
+    }
+
+    [GeneratedRegex(@"(?<sel>[^{}]+)\{(?<body>[^{}]*)\}")]
+    private static partial Regex Block();
 
     private static bool Matches(IElement element, ICssStyleRule rule)
     {

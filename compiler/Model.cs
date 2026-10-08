@@ -67,19 +67,32 @@ internal static class Properties
         ["rotation"] = ("rotate", "deg"),
         ["rotate"] = ("rotate", "deg"),
         ["rotationZ"] = ("rotate", "deg"),
+        // 3D rotation, drawn since CupriFace 0.35.0 (#269) and refused here until the matrix said
+        // so. 24 tweens across 3 blocks - a card that flips, a cuboid that turns.
+        ["rotationX"] = ("rotateX", "deg"),
+        ["rotationY"] = ("rotateY", "deg"),
         ["skewX"] = ("skewX", "deg"),
         ["skewY"] = ("skewY", "deg"),
         ["opacity"] = ("opacity", ""),
         ["autoAlpha"] = ("opacity", ""),     // GSAP also flips visibility; the engine ignores that anyway
         ["width"] = ("width", "px"),
         ["height"] = ("height", "px"),
+        // The draw-on idiom: dash the path by its own length, then wind the offset to zero. Both
+        // halves are needed - an offset with no dash array has nothing to offset - and the engine
+        // has animated them since 0.35.0 (#262). 36 tweens across 10 blocks.
+        ["strokeDashoffset"] = ("stroke-dashoffset", ""),
+        ["strokeDasharray"] = ("stroke-dasharray", ""),
     };
 
     /// <summary>The transform components, in the order they are written out. Fixed, because
     /// transform is not commutative and an order that varies between keyframe stops makes an
     /// element take a different path through the same two states.</summary>
+    /// <remarks>The 3D rotations are appended rather than slotted in beside <c>rotate</c>: the
+    /// order here is already arbitrary-but-fixed, and moving an existing component would change
+    /// the path every block with two transform components takes between the same two states.</remarks>
     public static readonly string[] TransformOrder =
-        ["translateX", "translateY", "scale", "scaleX", "scaleY", "rotate", "skewX", "skewY"];
+        ["translateX", "translateY", "scale", "scaleX", "scaleY", "rotate", "skewX", "skewY",
+         "rotateX", "rotateY"];
 
     public static bool IsTransform(string name) => TransformOrder.Contains(name);
 

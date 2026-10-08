@@ -64,12 +64,30 @@ the animation itself runs `linear`. Eight stops per eased tween, which is a roun
 yet a measured one — the comparison harness is what should decide it. See
 [COMPILER.md](COMPILER.md).
 
-**What 0.38.0 opens, not yet taken:** an element whose tweens touch disjoint properties — one on
-`opacity` with `power2.out`, one on `transform` with `elastic` — can become two animations, each
-carrying its true ease as `animation-timing-function` instead of eight sampled stops. That is an
-exact curve where there is currently an eight-point approximation of one. It is a real piece of
-work rather than a flag, because the grouping has to be per property and the merged path has to
-stay for every property two tweens share.
+**What 0.38.0 opens, and what measurement says about it.** The obvious prize looked like exact
+eases: an element whose tweens touch disjoint properties — one on `opacity` with `power2.out`, one
+on `transform` with `elastic` — could become two animations, each carrying its real curve as
+`animation-timing-function` instead of eight sampled stops.
+
+**Measured first, and it is not the prize.** Sampling every eased tween into twenty-four stops
+rather than eight moves the corpus mean by **0.02 of a point**. Five blocks move at all and only
+one by more than half a point. If tripling the stops buys nothing, an exact curve buys little
+either — the remaining error is not in the shape of the acceleration. Eight stays, and the
+emitter is not being rewritten for this.
+
+What the lifted constraint IS worth, in order:
+
+1. **Overlapping tweens of the same property** — 30 refusals across 6 blocks, every one reasoned
+   "one element gets one animation". And the translation would be faithful rather than
+   approximate: GSAP does not overwrite by default, so two concurrent tweens on one property both
+   run and the later-applied one wins at each instant, which is exactly how a CSS animation list
+   composes. `blue-sweater-intro-video` is one of the six and it FELL 4.7 points when `filter`
+   started being carried, precisely because five of its blur tweens overlap and were dropped while
+   the rest were kept.
+2. **Staggers** — 14 refusals. One animation per element with a different delay.
+
+Both are about carrying motion that is currently dropped, not about rendering carried motion more
+exactly. That is a different and smaller job than the rewrite, and it is the one worth doing.
 
 ### Everything else
 

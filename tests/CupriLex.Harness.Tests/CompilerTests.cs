@@ -1470,4 +1470,38 @@ public class CompilerTests
         Assert.Empty(compiled.Motion.Css);
         Assert.Contains(compiled.Refusals, r => r.What.Contains("could not decide", StringComparison.Ordinal));
     }
+
+    /// <summary>`.then(build)` as well as `.then(function () { ... })`. Four corpus blocks write the
+    /// first form, and code-slice-hero's whole composition is behind one of them.</summary>
+    [Fact]
+    public void A_named_function_passed_to_then_is_deferred_too()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            function build() { tl.to(".a", { x: 100, duration: 1, ease: "none" }, 0); }
+            document.fonts.load("700 20px X").then(build);
+            """);
+
+        Assert.Contains("translateX(100px)", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("`build()`", StringComparison.Ordinal));
+    }
+
+    /// <summary>A timeline DECLARED has always been recognised; one MADE by assignment was not, so
+    /// a timeline declared in one scope and built in another was not a timeline at all and every
+    /// tween on it fell through to the unreached report. code-slice-hero's whole composition is
+    /// behind that one line.</summary>
+    [Fact]
+    public void A_timeline_made_by_assignment_is_a_timeline()
+    {
+        var css = Css("""
+            let tl;
+            function build() {
+              tl = gsap.timeline({ paused: true });
+              tl.to(".a", { x: 100, duration: 1, ease: "none" }, 0);
+            }
+            document.fonts.load("x").then(build);
+            """);
+
+        Assert.Contains("translateX(100px)", css);
+    }
 }

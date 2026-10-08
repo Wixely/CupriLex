@@ -91,6 +91,14 @@ paints the static layers and none of the shader still matches a lot of pixels. T
 in its own output — `still reference 22 of 168 blocks change under 1% of their pixels over time;
 their score says little`. Do not read these scores as partial success.
 
+**A block whose reference barely moves has a score that is noise, and it will mislead you.**
+`frost-sequence-camera-orbit` paints 0.03% of its frame and reads 40.0% on one run and 60.0% on
+the next, tracking a browser reference that is itself not identical between runs. I credited a
+compiler change with that twenty points before checking, and the change had no pixel effect at
+all. The harness already says which blocks these are — `still reference 22 of 168 blocks change
+under 1% of their pixels over time; their score says little` — so the rule is: **read a per-block
+delta only after checking the block is not in that set.**
+
 **Four blocks cannot be measured at all**, and three of the four are canvas:
 
 | block | why there is no reference |

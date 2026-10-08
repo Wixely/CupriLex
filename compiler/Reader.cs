@@ -373,6 +373,11 @@ internal sealed class Reader
             return;
         }
 
+        // `const ready = document.fonts.load(...).then(build)` - the promise is KEPT as well as
+        // chained, which puts the .then() on the right of a declaration rather than in a statement
+        // of its own. The callback still runs, so it still has to be queued.
+        if (declarator.Init is CallExpression promise) Defer(promise, scope);
+
         scope.Bind(name.Name, Routine(declarator.Init) ?? Evaluator.Of(declarator.Init, scope));
     }
 
@@ -410,7 +415,19 @@ internal sealed class Reader
                 Call(call, scope);
                 break;
 
+            // `timeline = gsap.timeline({ paused: true })`, which Declare has always recognised
+            // and this did not - so a timeline declared in one scope and MADE in another was not a
+            // timeline, and every `.to()` on it fell through to the unreached report. Two blocks,
+            // and in code-slice-hero it is the whole composition.
+            case AssignmentExpression { Left: Identifier made, Right: CallExpression making,
+                    Operator: Acornima.Operator.Assignment }
+                when Call(making, scope) is { } clock:
+                scope.Set(made.Name, new Value.Timeline(clock));
+                _timelines.Add(made.Name);
+                break;
+
             case AssignmentExpression { Left: Identifier name, Operator: Acornima.Operator.Assignment } assign:
+                if (assign.Right is CallExpression chained) Defer(chained, scope);
                 scope.Set(name.Name, Routine(assign.Right) ?? Evaluator.Of(assign.Right, scope));
                 break;
 
@@ -428,6 +445,14 @@ internal sealed class Reader
             // so a tween reading it compiled to a value the browser had already overwritten. A
             // silently wrong number, which is the one outcome this compiler is arranged to avoid.
             // Measured: `const DATA = { n: 10 }; DATA.n = 99;` emitted translateX over 10.
+            // The same, assigned to a property instead of declared. code-slice-hero writes
+            // `window.__codeSliceReady = document.fonts.load(...).then(build)`, which is how its
+            // whole composition came to be behind a callback nothing reached.
+            case AssignmentExpression { Left: MemberExpression into, Right: CallExpression kept } written
+                when Defer(kept, scope):
+                Write(into, Evaluator.Of(kept, scope), scope);
+                break;
+
             case AssignmentExpression { Left: MemberExpression into } written:
                 Write(into, written.Operator == Acornima.Operator.Assignment
                     ? Routine(written.Right) ?? Evaluator.Of(written.Right, scope)
@@ -615,8 +640,14 @@ internal sealed class Reader
         // call is the inner one.
         if (member.Object is CallExpression earlier) Effect(earlier, scope);
 
-        if (call.Arguments.Count == 0 || Routine(call.Arguments[0]) is not Value.Routine body)
-            return true;
+        if (call.Arguments.Count == 0) return true;
+
+        // `.then(build)` as well as `.then(function () { ... })`. Four blocks write the first form,
+        // and code-slice-hero's whole composition is behind one of them.
+        var argument = Routine(call.Arguments[0])
+            ?? (call.Arguments[0] is Identifier named ? scope.Lookup(named.Name) : null);
+
+        if (argument is not Value.Routine body) return true;
 
         _deferred.Add((body, scope));
         return true;

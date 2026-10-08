@@ -16,9 +16,22 @@
 /// </summary>
 internal static class Ease
 {
-    /// <summary>How many extra stops an eased tween is sampled into. The curve is only visible in
-    /// the stops between its ends, and eight is where this started rather than where measurement
-    /// put it - the honest way to choose it is against the comparison harness.</summary>
+    /// <summary>
+    /// How many extra stops an eased tween is sampled into.
+    ///
+    /// <para>Eight was where this started rather than where measurement put it, and this comment
+    /// used to say so and leave the question open. <b>Measured now, against the whole corpus:
+    /// twenty-four stops instead of eight moves the mean by 0.02 of a point.</b> Five blocks move
+    /// at all and only one by more than half a point (north-korea-locked-down, +2.75). Three times
+    /// the keyframe stops for two hundredths of a point is not a trade worth making, so eight
+    /// stays.</para>
+    ///
+    /// <para>The useful half of that result is what it says about the engine constraint above. If
+    /// denser sampling bought nothing, an EXACT curve buys little either - so expressing per-tween
+    /// eases as real <c>animation-timing-function</c> values, which CupriFace 0.38.0's animation
+    /// lists finally make possible, is not where the remaining error is. That was worth knowing
+    /// before rewriting the emitter around it.</para>
+    /// </summary>
     public const int Samples = 8;
 
     /// <summary>GSAP's own default overshoot, used when <c>back</c> is written without one.</summary>

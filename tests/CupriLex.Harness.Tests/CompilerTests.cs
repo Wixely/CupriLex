@@ -777,4 +777,234 @@ public class CompilerTests
 
         Assert.Contains(compiled.Refusals, r => r.What.Contains("url(#mask)"));
     }
+
+    // ---- null is a value, not an absence of one --------------------------------------------------
+    // Value.Unknown means "this compiler could not work out what this is" and leaves both sides of
+    // a branch unread. Nothing means "the document says this is null", which is decidable. Reading
+    // the first as the second is what refused 150 tweens the browser does not run either.
+
+    [Fact]
+    public void A_branch_over_a_null_config_key_is_decided_and_not_refused()
+    {
+        var compiled = Compile("""
+            const DATA = { text: null };
+            const TXT = DATA.text || null;
+            const tl = gsap.timeline();
+            if (TXT) { tl.to(".a", { x: 100, duration: 1 }); }
+            tl.to(".a", { opacity: 0, duration: 1 }, 2);
+            """);
+
+        // The guarded tween does not run in a browser either, so neither carrying it nor
+        // refusing it is right: it should simply not be mentioned.
+        Assert.DoesNotContain("translateX(100px)", compiled.Motion.Css);
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("call(s) inside", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_branch_over_a_present_config_key_is_followed()
+    {
+        var css = Css("""
+            const DATA = { text: { words: 3 } };
+            const TXT = DATA.text || null;
+            const tl = gsap.timeline();
+            if (TXT) { tl.to(".a", { x: 100, duration: 1 }); }
+            """);
+
+        Assert.Contains("translateX(100px)", css);
+    }
+
+    /// <summary>Short-circuiting, so a right side this compiler cannot read costs nothing once the
+    /// left side has settled the answer.</summary>
+    [Theory]
+    [InlineData("0 || 100", 100)]
+    [InlineData("5 || 100", 5)]
+    [InlineData("5 && 100", 100)]
+    [InlineData("0 && 100", 0)]
+    [InlineData("null ?? 100", 100)]
+    public void The_logical_operators_fold_to_an_operand(string expression, double expected)
+    {
+        var css = Css($$"""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: {{expression}}, duration: 1 });
+            """);
+
+        Assert.Contains($"translateX({expected.ToString(System.Globalization.CultureInfo.InvariantCulture)}px)", css);
+    }
+
+    [Fact]
+    public void A_logical_operator_over_something_unknown_stays_unknown()
+    {
+        // The half that must not change: an unresolvable left side cannot settle the operator, so
+        // the whole test is undecidable and the branch stays unread.
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (window.matchMedia("(min-width: 1px)").matches || false) {
+              tl.to(".a", { x: 100, duration: 1 });
+            }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("could not decide", StringComparison.Ordinal));
+    }
+
+    // ---- a refusal that says which construct ----------------------------------------------------
+    // "inside a loop, a callback or a function" was three causes in one sentence and a quantity
+    // nobody could act on. The construct is in the AST; naming it is what turns 598 tweens into a
+    // list of decisions.
+
+    [Fact]
+    public void An_unfollowed_forEach_names_the_list_it_could_not_resolve()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            document.querySelectorAll(".x").forEach(function (el) {
+              tl.to(el, { x: 100, duration: 1 });
+            });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains(".forEach() over", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_unreached_function_body_names_the_function()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            function buildTimeline() { tl.to(".a", { x: 100, duration: 1 }); }
+            fetch("/x").then(function () { buildTimeline(); });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("`buildTimeline()`", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_unfollowed_promise_callback_names_what_it_was_waiting_on()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            document.fonts.ready.then(function () { tl.to(".a", { x: 100, duration: 1 }); });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains(".then() callback on `document.fonts.ready`", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_gsap_hook_is_named_as_the_hook_the_author_wrote()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { opacity: 0, duration: 1, onUpdate: function () { tl.to(".b", { x: 1, duration: 1 }); } });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("`onUpdate` callback", StringComparison.Ordinal));
+    }
+
+    /// <summary>Nearest, not outermost. A tween inside a forEach inside a .then() is kept out by
+    /// the forEach, and naming the .then() would send somebody to fix the wrong thing.</summary>
+    [Fact]
+    public void The_construct_named_is_the_nearest_one()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            document.fonts.ready.then(function () {
+              document.querySelectorAll(".x").forEach(function (el) {
+                tl.to(el, { x: 100, duration: 1 });
+              });
+            });
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains(".forEach() over", StringComparison.Ordinal));
+        Assert.DoesNotContain(compiled.Refusals,
+            r => r.What.Contains(".then() callback", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_undecidable_branch_quotes_the_test()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (window.innerWidth > 100) { tl.to(".a", { x: 100, duration: 1 }); }
+            """);
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("window.innerWidth > 100", StringComparison.Ordinal));
+    }
+
+    // ---- decided against is not the same as not reached ------------------------------------------
+    // A test that resolves to false, a counted loop that runs zero times, a forEach over an empty
+    // list: the motion inside does not run in a browser either, so the report should be silent
+    // about it. Reporting it as refused claimed 150 tweens were lost across the carousel blocks,
+    // every one of them a feature the composition had switched off.
+
+    [Fact]
+    public void A_false_branch_with_no_else_is_silent_rather_than_refused()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (null) { tl.to(".a", { x: 100, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Empty(compiled.Refusals);
+    }
+
+    [Fact]
+    public void A_false_branch_takes_the_else_and_says_nothing_of_the_other_side()
+    {
+        var compiled = Compile("""
+            const CONFIG = { fancy: false };
+            const tl = gsap.timeline();
+            if (CONFIG.fancy) { tl.to(".a", { x: 100, duration: 1 }); }
+            else { tl.to(".a", { x: 5, duration: 1 }); }
+            """);
+
+        Assert.Contains("translateX(5px)", compiled.Motion.Css);
+        Assert.DoesNotContain("translateX(100px)", compiled.Motion.Css);
+        Assert.Empty(compiled.Refusals);
+    }
+
+    [Fact]
+    public void A_counted_loop_that_runs_zero_times_is_silent()
+    {
+        var compiled = Compile("""
+            const CONFIG = { rows: 0 };
+            const tl = gsap.timeline();
+            for (let i = 0; i < CONFIG.rows; i++) { tl.to(".a", { x: i * 10, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Empty(compiled.Refusals);
+    }
+
+    [Fact]
+    public void A_forEach_over_an_empty_list_is_silent()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            [].forEach(function (n) { tl.to(".a", { x: n, duration: 1 }); });
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Empty(compiled.Refusals);
+    }
+
+    /// <summary>The half that must not change. A test this compiler cannot decide leaves BOTH
+    /// sides unread and names them, because either might be the one that runs.</summary>
+    [Fact]
+    public void An_undecidable_branch_still_names_both_sides()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (window.innerWidth > 100) { tl.to(".a", { x: 100, duration: 1 }); }
+            else { tl.to(".a", { x: 5, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("2 .to() call(s)", StringComparison.Ordinal));
+    }
 }

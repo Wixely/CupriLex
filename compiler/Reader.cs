@@ -61,6 +61,19 @@ internal sealed class Reader
     private readonly List<Refusal> _refusals = [];
     private readonly HashSet<Node> _handled = [];
     private readonly HashSet<Node> _inlining = [];
+
+    /// <summary>
+    /// Subtrees the walk left unread BECAUSE IT DECIDED THEY DO NOT RUN, which is the opposite of
+    /// not reaching them.
+    ///
+    /// <para>A branch whose test resolves to false, a counted loop that runs zero times, a
+    /// forEach over an empty list: the motion inside is not carried, and that is correct, because
+    /// the browser does not run it either. Without this set <see cref="Unreached"/> finds those
+    /// calls, sees no stop beside them and reports them as refused - 150 tweens across the 25
+    /// carousel blocks, every one of them a feature the composition has switched off. A report
+    /// that claims motion was lost when none was is worse than a quiet one.</para>
+    /// </summary>
+    private readonly HashSet<Node> _decided = [];
     private int _scriptLine;
     private string _scriptSource = "";
 
@@ -133,9 +146,19 @@ internal sealed class Reader
             // that is NOT decidable leaves both sides unread, exactly as before, and Unreached()
             // names what was in them.
             case IfStatement branch:
-                if (Evaluator.Of(branch.Test, scope).Truth is { } taken
-                    && (taken ? branch.Consequent : branch.Alternate) is { } followed)
-                    Statement(followed, new Scope(scope));
+                if (Evaluator.Of(branch.Test, scope).Truth is { } taken)
+                {
+                    // Both sides are accounted for: one is walked, the other is recorded as
+                    // decided against. An `if` with no else and a false test has NO side to walk
+                    // and still owes that record - which is the case that was being reported as
+                    // undecidable, with the test quoted, for a test this compiler had in fact
+                    // decided.
+                    if ((taken ? branch.Alternate : branch.Consequent) is { } dropped)
+                        _decided.Add(dropped);
+
+                    if ((taken ? branch.Consequent : branch.Alternate) is { } followed)
+                        Statement(followed, new Scope(scope));
+                }
                 break;
 
             default:
@@ -190,6 +213,10 @@ internal sealed class Reader
         var inner = new Scope(scope);
         var iterations = 0;
 
+        // A loop whose extent is resolvable and zero is a feature switched off, not motion
+        // missed. `for (let i = 0; i < CONFIG.rows; i++)` over a config that says zero rows.
+        if (!Continues(test.Operator, from, bound)) _decided.Add(loop.Body);
+
         for (var value = from; Continues(test.Operator, value, bound); value += stride)
         {
             if (++iterations > MostIterations)
@@ -218,6 +245,8 @@ internal sealed class Reader
                 + " this compiler will write out - the motion inside it is not carried", Line(each)));
             return;
         }
+
+        if (list.Of.Count == 0) _decided.Add(each.Body);
 
         var inner = new Scope(scope);
 
@@ -255,6 +284,10 @@ internal sealed class Reader
         }
 
         _handled.Add(call);
+
+        // An empty list is a feature switched off, not motion missed - and the callback's body is
+        // what holds the calls, so that is what gets recorded.
+        if (list.Of.Count == 0) _decided.Add(body.Body);
 
         for (var index = 0; index < list.Of.Count; index++)
         {
@@ -937,36 +970,168 @@ internal sealed class Reader
     // ---- what was missed ----------------------------------------------------------------------
 
     /// <summary>
-    /// Every motion call the walk above did not reach, named.
+    /// Every motion call the walk above did not reach, named - and named with the construct that
+    /// kept it out.
     ///
     /// <para>This is the half that makes the rest trustworthy. The statement walker follows only
     /// what it can resolve, so a timeline built inside a loop or a callback is simply not visited -
     /// and without this it would leave no trace at all, which is precisely how somebody ships a
     /// video missing its transitions.</para>
+    ///
+    /// <para>The first version of this said "inside a loop, a callback or a function", which is
+    /// three causes in one sentence and a quantity nobody can act on: 598 tweens across 99 blocks,
+    /// with no way to tell the ones behind a <c>document.fonts.ready.then()</c> - which always
+    /// runs, and could be followed - from the ones inside a per-frame <c>onUpdate</c>, which never
+    /// can be. Naming the enclosing construct is what turns that number into a list of
+    /// decisions.</para>
     /// </summary>
     private void Unreached(Node tree)
     {
-        var missed = new Dictionary<string, (int Count, int Line)>();
+        var missed = new Dictionary<(string Verb, string Cause), (int Count, int Line)>();
+        var parents = Parents(tree);
 
         foreach (var node in tree.Descendants())
         {
             if (node is not CallExpression call || _handled.Contains(call)) continue;
             if (call.Callee is not MemberExpression { Property: Identifier verb }) continue;
             if (!MotionVerbs.Contains(verb.Name)) continue;
+            if (Decided(call, parents)) continue;
 
-            var line = Line(call);
-            var key = verb.Name;
+            var key = (verb.Name, Because(call, parents));
             missed[key] = missed.TryGetValue(key, out var seen)
                 ? (seen.Count + 1, seen.Line)
-                : (1, line);
+                : (1, Line(call));
         }
 
-        foreach (var (verb, (count, line)) in missed)
+        foreach (var ((verb, cause), (count, line)) in missed)
             _refusals.Add(new Refusal(
-                $"{count} .{verb}() call(s) inside a loop, a callback or a function this compiler "
-                + "does not follow - their motion is not carried, and neither is the TIME they "
-                + "occupy, so anything appended after them on the same timeline runs early", line));
+                $"{count} .{verb}() call(s) {cause}. Their motion is not carried, and neither is "
+                + "the TIME they occupy, so anything appended after them on the same timeline "
+                + "runs early", line));
     }
+
+    /// <summary>Whether a call sits inside a subtree the walk decided does not run. Climbing is
+    /// necessary rather than a direct lookup: what is recorded is the branch or loop body, and the
+    /// call may be several statements deep inside it.</summary>
+    private bool Decided(Node call, Dictionary<Node, Node> parents)
+    {
+        if (_decided.Count == 0) return false;
+
+        for (var node = call; node is not null; )
+        {
+            if (_decided.Contains(node)) return true;
+            if (!parents.TryGetValue(node, out var parent)) return false;
+            node = parent;
+        }
+
+        return false;
+    }
+
+    /// <summary>Every node's parent, so a missed call can be asked what it is inside. The walkers
+    /// here are top-down and an AST node keeps no upward link.</summary>
+    private static Dictionary<Node, Node> Parents(Node tree)
+    {
+        var found = new Dictionary<Node, Node>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<Node>();
+        pending.Push(tree);
+
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            foreach (var child in node.ChildNodes)
+            {
+                found[child] = node;
+                pending.Push(child);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The nearest construct between a missed call and the top of the script, in the author's own
+    /// vocabulary.
+    ///
+    /// <para>Nearest, not outermost: a tween inside a <c>forEach</c> inside a
+    /// <c>document.fonts.ready.then()</c> is kept out by the forEach, and answering "a .then()
+    /// callback" would send somebody to fix the wrong thing.</para>
+    /// </summary>
+    private string Because(Node call, Dictionary<Node, Node> parents)
+    {
+        var node = call;
+
+        while (parents.TryGetValue(node, out var parent))
+        {
+            switch (parent)
+            {
+                case ForStatement or ForOfStatement or ForInStatement:
+                    return "inside a loop whose extent this compiler could not resolve";
+
+                case WhileStatement or DoWhileStatement:
+                    return "inside a while loop, whose extent no static reading can know";
+
+                case FunctionDeclaration { Id: Identifier named }:
+                    return $"in the body of `{named.Name}()`, which nothing this compiler reached "
+                        + "calls";
+
+                case FunctionExpression or ArrowFunctionExpression:
+                    return parents.TryGetValue(parent, out var host)
+                        ? Callback(parent, host)
+                        : "inside a function this compiler never saw called";
+
+                case IfStatement branch when !ReferenceEquals(branch.Test, node):
+                    return $"inside `if ({Snippet(branch.Test)})`, a test this compiler could "
+                        + "not decide";
+
+                case TryStatement:
+                    return "inside a try/catch, where which half runs is not knowable";
+
+                case SwitchStatement or SwitchCase:
+                    return "inside a switch case this compiler could not decide";
+            }
+
+            node = parent;
+        }
+
+        return "something this walk did not reach";
+    }
+
+    /// <summary>What a function literal was passed to, which is the useful half of why its body
+    /// went unread. <c>document.fonts.ready.then()</c> always runs and an <c>onUpdate</c> runs
+    /// sixty times a second, and those are not the same problem at all.</summary>
+    private string Callback(Node function, Node host) => host switch
+    {
+        // gsap's own hooks, as the author wrote them: `onComplete: () => ...`.
+        Property { Key: Identifier hook } => $"inside an `{hook.Name}` callback",
+        Property { Key: StringLiteral hook } => $"inside an `{hook.Value}` callback",
+
+        CallExpression { Callee: MemberExpression { Property: Identifier method } owner } =>
+            method.Name switch
+            {
+                "then" or "catch" or "finally" =>
+                    $"inside a .{method.Name}() callback on `{Snippet(owner.Object)}`",
+                "addEventListener" when FirstString(host) is { } raised =>
+                    $"inside an addEventListener('{raised}') handler",
+                "forEach" or "map" or "filter" or "some" or "every" =>
+                    $"inside a .{method.Name}() over `{Snippet(owner.Object)}`, a list this "
+                        + "compiler could not resolve",
+                _ => $"inside a function passed to .{method.Name}()",
+            },
+
+        CallExpression { Callee: Identifier called } => called.Name switch
+        {
+            "setTimeout" or "setInterval" or "requestAnimationFrame" =>
+                $"inside a {called.Name}() callback",
+            _ => $"inside a function passed to {called.Name}()",
+        },
+
+        _ => "inside a function this compiler never saw called",
+    };
+
+    /// <summary>The first argument when it is a string, which is where an event name lives.</summary>
+    private static string? FirstString(Node host) =>
+        host is CallExpression { Arguments.Count: > 0 } call
+        && call.Arguments[0] is StringLiteral first ? first.Value : null;
 
     /// <summary>The line in the BLOCK, not in the script: the script's own offset plus the lines
     /// before this node. Counted from the source rather than read off the node, because every

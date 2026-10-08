@@ -33,6 +33,19 @@ internal abstract record Value
     /// it: <c>const tl = gsap.timeline()</c> is a binding like any other.</summary>
     public sealed record Timeline(Clock Of) : Value;
 
+    /// <summary>
+    /// <c>null</c> or <c>undefined</c>, which is a value and not an absence of one.
+    ///
+    /// <para>The distinction is the whole point. <see cref="Unknown"/> means "this compiler could
+    /// not work out what this is", and a test over it leaves both branches unread. Nothing means
+    /// "the document says this is null", and a test over it is decidable - falsy, for certain.
+    /// The carousel family turns on exactly that: <c>const TXT = DATA.text || null</c> over a
+    /// <c>DATA</c> whose <c>text</c> key is written <c>null</c>, then <c>if (TXT)</c> around the
+    /// text layer's whole timeline. Reading null as unknown refused 150 tweens across 25 blocks
+    /// that the browser does not run either.</para>
+    /// </summary>
+    public sealed record Nothing : Value;
+
     /// <summary>Not resolvable, and why. The reason is carried all the way into the report.</summary>
     public sealed record Unknown(string Why) : Value;
 
@@ -66,6 +79,7 @@ internal abstract record Value
         Number n => n.Of != 0,
         Text t => t.Of.Length > 0,
         Selector or Bag or List or Routine or Timeline => true,
+        Nothing => false,
         _ => null,
     };
 }
@@ -148,10 +162,20 @@ internal static class Evaluator
         NumericLiteral n => new Value.Number(n.Value),
         StringLiteral s => new Value.Text(s.Value),
         BooleanLiteral b => new Value.Number(b.Value ? 1 : 0),
+        NullLiteral => new Value.Nothing(),
+
+        // `undefined` is an identifier in JavaScript, not a literal, and nothing rebinds it in a
+        // composition. A block that writes `CONFIG.src || undefined` means the same falsy thing
+        // as one that writes null.
+        Identifier { Name: "undefined" } => new Value.Nothing(),
 
         Identifier id => scope.Lookup(id.Name),
 
         UnaryExpression u => Unary(u, scope),
+
+        // Before BinaryExpression, which it derives from: `&&` is a BinaryExpression as far as
+        // the type hierarchy is concerned and arithmetic folding is the wrong answer for it.
+        LogicalExpression l => Logical(l, scope),
         BinaryExpression b => Binary(b, scope),
         ConditionalExpression c => Conditional(c, scope),
 
@@ -192,6 +216,32 @@ internal static class Evaluator
             (Acornima.Operator.UnaryPlus, { } n) => new Value.Number(n),
             _ => new Value.Unknown($"unary {node.Operator}"),
         };
+    }
+
+    /// <summary>
+    /// <c>&amp;&amp;</c>, <c>||</c> and <c>??</c>, which yield an OPERAND rather than a boolean.
+    ///
+    /// <para>That is what makes them worth folding: <c>DATA.text || null</c> is how this corpus
+    /// writes an optional feature, and the branch that guards it is decidable the moment the
+    /// operator is. Short-circuiting is honoured, so a right side this compiler cannot read costs
+    /// nothing when the left side already settles the answer - <c>CONFIG.grid &amp;&amp;
+    /// buildGrid()</c> resolves when the grid is off.</para>
+    /// </summary>
+    private static Value Logical(LogicalExpression node, Scope scope)
+    {
+        var left = Of(node.Left, scope);
+
+        if (node.Operator == Acornima.Operator.NullishCoalescing)
+            return left is Value.Nothing ? Of(node.Right, scope)
+                : left.Known ? left
+                : new Value.Unknown("a ?? over a left side that is not known");
+
+        if (left.Truth is not { } decided)
+            return new Value.Unknown($"a {node.Operator} over a left side that is not known");
+
+        var shortCircuits = node.Operator == Acornima.Operator.LogicalAnd ? !decided : decided;
+
+        return shortCircuits ? left : Of(node.Right, scope);
     }
 
     private static Value Binary(BinaryExpression node, Scope scope)

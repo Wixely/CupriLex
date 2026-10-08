@@ -13,19 +13,54 @@ the line it was on.
 
 ---
 
+## Getting it
+
+[**v0.1.0-alpha.1**](https://github.com/Wixely/CupriLex/releases/tag/v0.1.0-alpha.1) — the first
+tagged release. `CupriLex.Compiler` is on this organisation's GitHub Packages feed:
+
+```
+dotnet add package CupriLex.Compiler --version 0.1.0-alpha.1
+```
+
+Restoring needs a GitHub Packages credential even though the package is public — see the comment
+in [NuGet.config](NuGet.config). One entry point, and the refusals are half of it:
+
+```csharp
+// directory is where relative assets resolve from, and may be null
+var result = Translator.Of(html, directory);
+
+result.Html            // the rewritten document
+result.Motion.Css      // the @keyframes compiled out of the GSAP timeline
+result.Refusals        // everything that did not come across, each with a reason and a line
+```
+
+**Alpha means the surface is one type and one method and may still move.** It does not mean the
+numbers below are provisional: they are measured, reproducible from a pinned corpus, and the
+release notes carry the same ones.
+
+For a whole composition rather than a document, the harness writes a `.cutpkg` — CupriCut's own
+format, with the assets, the fonts and the report inside:
+
+```
+dotnet run --project harness -- --all --package out
+```
+
+---
+
 ## Read this before anything else
 
 The corpus was surveyed before a line of the translator was designed, and it says something the
 original plan did not expect.
 
-**All 187 HyperFrames blocks are animated entirely in JavaScript. Not one uses CSS `@keyframes`
+**Every HyperFrames block is animated entirely in JavaScript. Not one uses CSS `@keyframes`
 or `animation:`.**
 
 | | |
 |---|---|
-| blocks surveyed | **187** |
-| load GSAP | **187 — 100%** |
-| have an inline `<script>` | **187 — 100%** |
+| blocks surveyed | **172** |
+| load GSAP | **172 — 100%** |
+| have an inline `<script>` | **172 — 100%** |
+| use `position: absolute` | **172 — 100%** |
 | use `@keyframes` | **0** |
 | use CSS `animation:` | **0** |
 | use CSS `transition:` | **0** |
@@ -34,15 +69,10 @@ CupriFace has no JavaScript engine, by design. So there is no subset of this cor
 without the GSAP compiler — it is not the hard half of the job, it is the *whole* job. Everything
 else (tokens, typography, layout) is the easy part that arrives for free once motion is solved.
 
-Reproduce these numbers with `python tools/survey.py` — see [docs/CORPUS.md](docs/CORPUS.md).
-
----
-
-**Not every block can be reached, and the ones that cannot are counted rather than averaged into
-the total.** 84 of the 172 measured blocks build their DOM in JavaScript or draw their picture into
-a canvas; the 81 that are actually translatable average 62.6%. See
-[docs/UNFIXABLE.md](docs/UNFIXABLE.md), which also keeps the list of things that looked unfixable
-and turned out to be work.
+Reproduce with `python tools/survey.py` — see [docs/CORPUS.md](docs/CORPUS.md). The first survey
+counted **187** blocks, because it ran against upstream `main` before the corpus was pinned; the
+pin holds 172 and the finding came out the same, which is the strongest thing that can be said
+about it.
 
 ---
 
@@ -53,8 +83,9 @@ and turned out to be work.
 2. **Measure how far off it is**, against a real browser, frame by frame — `harness/`. *(done)*
 3. **Compile GSAP timelines to `@keyframes`** for the verbs the corpus actually uses —
    `compiler/`. *(done)*
-4. **Rewrite what can be rewritten** and **report what cannot**. *(in progress: three rules exist,
-   each because it was blocking a measurement)*
+4. **Rewrite what can be rewritten** and **report what cannot**. *(in progress: seven rewrite
+   rules, each written because it was blocking a measurement, and 1,461 refusals over the corpus
+   that each name a property or a target and a line)*
 
 See [PLAN.md](PLAN.md).
 
@@ -97,12 +128,24 @@ On CupriFace 0.39.0, over the corpus pinned at
 | median | 55.9% |
 | mean of content, over the 146 whose reference actually moves | 49.7%, median 58.8% |
 | blocks that are translatable at all | **81 of 172**, mean **62.6%** |
+| mean of frame | 80.0% |
+| where it is wrong, off by | 27.6% of full scale |
+| **blocks the engine paints almost nothing in** | **73 of 168** |
 
-**Quote the second mean, not the first, when comparing one change to another.** 22 blocks change
-under 1% of their pixels over the whole timeline, and a block that paints 0.03% of its frame reads
-40% on one run and 60% on the next while its refusals stay byte-identical — tracking a browser
+Two warnings, and both are about reading the first row rather than about the work.
+
+**84 of the 172 blocks cannot be reached at all**, and they are counted rather than averaged away:
+they build their DOM in JavaScript from a markup shell, or draw their picture into a canvas from a
+per-frame callback. Neither is reachable by static analysis, which is why the translatable row is
+there. [docs/UNFIXABLE.md](docs/UNFIXABLE.md) argues each group from the refusal text, and keeps
+the list of things that looked unfixable and turned out to be work.
+
+**Quote the mean over the 146 whose reference moves, not the headline, when comparing one change
+to another.** 22 blocks change
+under 1% of their pixels over the whole timeline, and one that paints 0.03% of its frame reads
+40.0% on one run and 60.0% on the next while its refusals stay byte-identical — tracking a browser
 reference that is not deterministic. I credited a compiler change with twenty points on one of
-those before checking. See [docs/UNFIXABLE.md](docs/UNFIXABLE.md).
+those before checking.
 
 Measured 8 October 2026, with the faces a block links from a font service *not* fetched, so it is
 comparable with every number before it. On the same pin, in order:
@@ -145,12 +188,13 @@ mean fell from 40.8% to 37.1% without a line of this repository changing: the bl
 the dense-text ones scoring 70–99%. It is pinned now, so these numbers can be reproduced and the
 next ones can be compared to them. CI asks upstream weekly whether the pin has aged.
 
-That last row is the constraint, and it was not visible until it was measured. Half the corpus
-renders under 0.5% of its own frame — the composition is built or painted by the JavaScript that
-had to be removed — so those blocks cannot be improved by fidelity work of any kind. Four correct
-fixes in a row moved the mean by nothing for this reason: a timeline cursor, an easing parameter, a
-WOFF 2 font decoder that changed the pixels of exactly three blocks, and reading start values out
-of the stylesheet, which turned 50 stills into animations and left the mean where it was.
+**The row about blocks the engine paints almost nothing in is the constraint**, and it was not
+visible until it was measured. 73 of 168 render under 0.5% of their own frame, because the
+composition is built or painted by the JavaScript that had to be removed — so those blocks cannot
+be improved by fidelity work of any kind. Four correct fixes in a row moved the mean by nothing for
+this reason: a timeline cursor, an easing parameter, a WOFF 2 font decoder that changed the pixels
+of exactly three blocks, and reading start values out of the stylesheet, which turned 50 stills
+into animations and left the mean where it was.
 
 The first one that did move it was drawing the images, worth 2.5 points, and it had been
 documented as done for weeks while no code did it.
@@ -206,11 +250,8 @@ Four verbs — `to`, `set`, `fromTo`, `from` — are 2618 of the calls. That is 
   composition would fetch off the machine and who gets asked.
 
   The translation is also a library, for a host that wants to do this at run time:
-  `CupriLex.Compiler`, alpha, see [docs/PACKAGING.md](docs/PACKAGING.md).
-
-  ```
-  dotnet run --project harness -- --all --package out
-  ```
+  `CupriLex.Compiler`, alpha — see [Getting it](#getting-it) above and
+  [docs/PACKAGING.md](docs/PACKAGING.md).
 - **Not a general HTML-to-CupriFace converter**, though it may become one. The corpus is the
   target, and the corpus is what keeps the scope honest.
 
@@ -224,14 +265,29 @@ dotnet build harness -c Release
 dotnet run --project tests/CupriLex.Harness.Tests   # the tests
 ```
 
-The tests are run by **running them**, not with `dotnet test`. They are xunit v3, which is a
-self-hosting executable on Microsoft.Testing.Platform, and the .NET 10 SDK still routes
+263 tests, and they are run by **running them**, not with `dotnet test`. They are xunit v3, which
+is a self-hosting executable on Microsoft.Testing.Platform, and the .NET 10 SDK still routes
 `dotnet test` down the VSTest path and refuses before discovering anything — with both documented
 opt-ins in place.
 
 Restoring needs a GitHub Packages credential, because CupriFace is served from there and GitHub
 requires authentication even for a public NuGet package. See the comment in
 [NuGet.config](NuGet.config).
+
+### Cutting a release
+
+**The tag is the version.** CI packs at `${GITHUB_REF_NAME#v}`, so a release cannot disagree with
+what it publishes and the `<Version>` in the csproj is what the tag should say.
+
+```
+git tag -a v0.1.0-alpha.2 -m "..." && git push origin v0.1.0-alpha.2
+```
+
+Watch the `publish` job rather than the run, and read its log rather than its conclusion. The
+first tag this repository ever pushed built the package and then failed to upload it, because a
+quoted glob does not expand under pwsh — and a push step that finds nothing can report success
+just as easily, which is why that step now fails loudly on an empty `dist/`. The log should say
+`Your package was pushed.`
 
 ---
 

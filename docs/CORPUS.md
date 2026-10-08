@@ -1,8 +1,13 @@
 ﻿# The corpus
 
-187 HyperFrames blocks, plus 220 components and 9 examples. Real, designed, animated compositions
-by people who were not thinking about this engine — which is exactly what makes them worth testing
+172 HyperFrames blocks, plus components and examples. Real, designed, animated compositions by
+people who were not thinking about this engine — which is exactly what makes them worth testing
 against.
+
+The first survey counted **187**, because it ran against upstream `main` before the corpus was
+pinned to [`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824).
+Two fetches a day apart once differed by 24 blocks removed and 9 added, which is why it is pinned
+now. Where a number below says 187 it is from that first survey and is left as it was measured.
 
 ```
 python tools/fetch-corpus.py       # ~110 MB, keeps registry/ only
@@ -16,11 +21,13 @@ Not vendored. See [tools/fetch-corpus.py](../tools/fetch-corpus.py) for why.
 
 ## The finding that reshaped the plan
 
-**Not one block uses CSS animation.**
+**Not one block uses CSS animation.** Re-run against the pin, and it came out the same — which is
+the strongest thing that can be said about a finding this much rests on.
 
 ```
-   187  100%  loads GSAP
-   187  100%  inline <script>
+   172  100%  loads GSAP
+   172  100%  inline <script>
+   172  100%  position:absolute
      0    0%  @keyframes
      0    0%  CSS animation:
      0    0%  CSS transition:
@@ -72,8 +79,16 @@ are what CupriCut's `data-cut-event` is for — declared and reported, never exe
 
 ### Features that will need a decision, by how many blocks they affect
 
-Measured against **CupriFace 0.26.1** by `conformance/` — see
-[`conformance/support/0.26.1.json`](../conformance/support/0.26.1.json). Nothing below is a guess.
+**This table is a historical record and is left as it was measured.** The block counts are the
+187-block survey's and the engine column is **CupriFace 0.26.1** — thirteen releases ago, and most
+of its NOT-rendered rows have since been fixed, several of them from issues this repository filed.
+It is kept because the *decisions* it drove are what the compiler is made of, and because a row
+that was wrong about the engine for a while is worth being able to point at.
+
+For what the engine does today, read
+[`conformance/support/0.39.0.json`](../conformance/support/0.39.0.json) and
+[CONFORMANCE.md](CONFORMANCE.md); for the current block counts, re-run `python tools/survey.py`.
+Nothing below was a guess when it was written.
 
 | | blocks | CupriFace 0.26.1 |
 |---|---|---|

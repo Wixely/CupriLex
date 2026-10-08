@@ -290,6 +290,135 @@ found, because a missing file reads `NO` for the wrong reason, the same way the 
 
 ---
 
+### What dissecting thread-message-stack found
+
+The second block taken apart rather than counted, chosen the same way x-post was: it paints
+plenty and scores badly, which means it drew the WRONG thing rather than nothing. 6.5% of
+content, three refusals, and the same ~7% at every sample including `t=0` - so not a motion
+failure at all, but a first frame that is already wrong.
+
+Three causes, none of them a property anybody had thought to probe:
+
+```
+radial-gradient      at 20% 20% vs at 80% 80%       yes   NO    -      28 blocks, 63 declarations
+background           two image layers vs one        yes   NO    -      38 blocks
+hidden               attribute on a div with text   yes   NO    -       1 block
+```
+
+**The `at <position>` of a radial gradient is ignored, and every one is drawn in the centre of its
+box.** The radius is right - a centred `circle` with a hard stop at 50% measures 111px against the
+111.8px CSS gives for `farthest-corner` - and the position is not read at all, in percentages,
+pixels or keywords:
+
+```
+at 50% 50%      disc centre (199, 99)  r=39     CSS says (200,100) r=40
+at 18% 20%      disc centre (199, 99)  r=39     CSS says ( 72, 40) r=40
+at 75% 18%      disc centre (199, 99)  r=39     CSS says (300, 36) r=40
+at 100px 50px   disc centre (199, 99)  r=39     CSS says (100, 50) r=40
+at left top     disc centre (199, 99)  r=39     CSS says (  0,  0) r=40
+```
+
+That is what this block's background is made of: four radials lighting four different corners,
+all collapsed onto the middle and overlapping into one dull glow. The blocks that write these are
+disproportionately the ones scoring badly - `vpn-youtube-spot`, `beat-freeze-cut`,
+`slack-notification-ad`, `transitions-light`, `macos-tahoe-liquid-glass`, `ui-3d-reveal` and
+`ios26-liquid-glass` are all in the paints-a-lot-scores-badly table.
+
+**Only the first image layer of a background is painted.** `red, blue` renders identically to
+`red` alone, and `blue, red` identically to `blue`. A solid colour as the last layer IS painted
+underneath, so it is layering of IMAGES specifically. The 0.35.0 notes state this as a known
+limit; 38 blocks stack two or more.
+
+**The `hidden` attribute does nothing.** This block keeps its message data in a
+`<div hidden data-hf-primitive-data>{...}</div>` island, which a browser hides through its UA
+stylesheet, and the engine paints the raw JSON across the top of the frame. An author-level
+`[hidden]{display:none}` fixes it, and `display:none` works, so it is one missing UA rule.
+
+WHAT EACH COST, WHICH IS NOT WHAT IT LOOKS LIKE
+
+Emulated one at a time against the browser frames:
+
+| | mean content correct |
+|---|---|
+| as translated | 6.5% |
+| + `hidden` honoured | 6.5% |
+| + the four background layers stacked | 7.8% |
+| + both | 7.9% |
+
+The JSON text is the most visible thing wrong with the frame and it is worth **nothing**, because
+those pixels were already wrong: removing bad ink does not make a pixel right when the thing that
+belongs there is a gradient the engine is not drawing. And stacking the layers is worth only 1.3
+because they were still all being centred. The three causes are not additive - the background is
+one picture, and it is wrong until all of them are right.
+
+The ceiling is the honest part. The bubbles themselves are built by `document.createElement` from
+that JSON, so they can never render, but at `t=0` no bubble has appeared yet and the engine still
+scores 7.9% of content. **The background alone is ~92 points of this block's gap**, and the
+JavaScript that cannot be carried accounts for about five.
+
+All three went upstream as CupriFace #278, #279 and #280. None is worked around here, and the
+reasons differ. The gradient prelude and the layer list would both mean replacing a background
+with generated child elements - DOM surgery that needs the element's size in px, cannot reach a
+pseudo-element, and would be wrong anyway until both landed, since every generated layer would
+still be centred. The `hidden` attribute could be answered in three lines, by putting
+`[hidden]{display:none}` first in the emitted stylesheet where an author rule still beats it; it
+is not done because it buys nothing measurable, and the argument for doing it is that a package
+built today paints JSON across the frame.
+
+The engine's own source said where two of the three came from, which is worth doing before
+writing an issue: `ParseGradient` steps over the prelude with a comment saying so, and
+`ParseBackgroundImage` takes `SplitTopLevel(t, ',').FirstOrDefault()`. A report that names the
+line is a report somebody can act on.
+
+### 0.37.0 answered all three, and it was the largest jump the corpus has had
+
+**44.3% to 46.0%, 15 blocks better and 2 worse.** `slack-notification-ad` — the motion canary, and
+for months the worst-scoring one — went from **20.0% to 93.6%**. `message-thread-reveal` 39.5 to
+87.4, `north-korea-locked-down` 23.2 to 68.4, `oscilloscope-trace` 38.0 to 71.3, `beat-freeze-cut`
+23.9 to 44.9, `vpn-youtube-spot` 34.3 to 52.9.
+
+Three gaps found by dissecting one block were worth more than the eleven found by ranking the
+engine's own diagnostics. That is the argument for the method, not for the properties.
+
+The flips were checked rather than trusted. Position is exact in percentages, pixels and keywords;
+extent is exact too (`circle at 75% 18%` with a 34% stop measures 575px against the 575 CSS
+computes, `at 62% 74%` gives 458 against 459); and the default ellipse the release notes warn
+about measures 282 × 142 against the 282.8 × 141.4 CSS requires. Two of four extent readings
+looked wrong and were this probe scanning into the box edge, not the engine.
+
+### The bug that was hiding under them
+
+`thread-message-stack`, the block all three came from, moved only 6.5% to 9.4%. Its engine ink
+tripled to 0.723 against the browser's 0.921 and its "off by" fell from 26.5% to 17.8%, so the
+layers and positions plainly landed. The pixels still miss an 8-of-255 tolerance nearly
+everywhere, and the reason is a fourth bug the first three were masking:
+
+```
+gradient stop   transparent vs the same colour at alpha 0   yes   yes   -
+```
+
+**Read that row as a should-match pair, like the rgba-versus-hex ones: `yes` means the two
+documents DIFFER, and they are required not to.** CSS interpolates gradient stops in premultiplied
+alpha, so `transparent` behaves as the neighbouring colour at zero alpha. The engine interpolates
+in straight RGBA, so the keyword is transparent BLACK and every fade drags grey:
+
+| gradient | `transparent` keyword | explicit alpha-0 colour |
+|---|---|---|
+| `#f0d3a6` → out | (207, 197, 182) | (247, 233, 210) |
+| `#e8a86a` → out, radial | (198, 181, 164) | (244, 214, 185) |
+
+45 of 172 blocks write 124 of these. Reported as CupriFace #283.
+
+It also explains the run's one real loser. `macos-tahoe-liquid-glass` fell 15.5% to 9.1% while its
+ink went 0.243 to 0.600 against a browser painting 0.736, its "off by" fell 50.2 to 43.1 and its
+severe share fell too. It writes seven fades to `transparent`. The block got closer by every
+measure except the one in the headline, because a block that moves from painting nothing to
+painting nearly the right thing in slightly wrong colours trades absent pixels for wrong ones, and
+the content measure counts the second and not the first. Worth remembering before reading a single
+block's drop as a regression.
+
+---
+
 ## How a translator uses it
 
 Every rewrite rule declares what it is working around:

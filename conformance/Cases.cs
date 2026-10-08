@@ -541,6 +541,85 @@ public static class Cases
             new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 1px,transparent 1px);}"),
             new Doc(Div, ".p{width:200px;height:80px;background-image:linear-gradient(90deg,#d9642a 0.5%,transparent 0.5%);}")),
 
+        // ---- what dissecting thread-message-stack found ----------------------------------------
+        // 6.5% of content with three refusals, which is as close as this corpus gets to "the
+        // compiler carried everything and the picture is still wrong". Three causes, each its own
+        // row. See docs/CONFORMANCE.md.
+
+        // The `at <position>` of a radial gradient. The two halves put the SAME gradient in
+        // opposite corners, so a 'yes' means the position moved it and a 'NO' means both were
+        // drawn in the same place - which is the box centre, whatever was asked for. 28 blocks
+        // write 63 of these, and they light the corners of a composition.
+        new("radial-gradient", "at 20% 20% vs at 80% 80%",
+            new Doc(Div, ".p{width:200px;height:120px;background:"
+                         + "radial-gradient(circle at 20% 20%, #d9642a 0, transparent 40%);}"),
+            new Doc(Div, ".p{width:200px;height:120px;background:"
+                         + "radial-gradient(circle at 80% 80%, #d9642a 0, transparent 40%);}")),
+
+        // CSS's default ending shape is an ELLIPSE, and 0.37.0 started saying so - which changes
+        // gradients that were already written. The two halves are a bare gradient against an
+        // explicit `circle`, in a box twice as wide as it is tall: a 'yes' means the default is
+        // not a circle. 11 corpus blocks write a bare one.
+        new("radial-gradient", "default shape vs explicit circle",
+            new Doc(Div, ".p{width:200px;height:100px;background:"
+                         + "radial-gradient(#d9642a 0, #d9642a 50%, transparent 50%);}"),
+            new Doc(Div, ".p{width:200px;height:100px;background:"
+                         + "radial-gradient(circle, #d9642a 0, #d9642a 50%, transparent 50%);}")),
+
+        // Two image layers in one declaration against the first alone. CSS paints the first ON TOP
+        // of the second, so they differ wherever the top one is transparent; identical means only
+        // one layer was drawn. 38 blocks stack two or more.
+        new("background", "two image layers vs one",
+            new Doc(Div, ".p{width:200px;height:120px;background:"
+                         + "linear-gradient(90deg,#d9642a,transparent 70%),"
+                         + "linear-gradient(270deg,#3f6fd8,transparent 70%);}"),
+            new Doc(Div, ".p{width:200px;height:120px;background:"
+                         + "linear-gradient(90deg,#d9642a,transparent 70%);}")),
+
+        // Fading to `transparent`. CSS interpolates gradient stops in PREMULTIPLIED alpha, so the
+        // keyword behaves as "this colour at zero alpha" and the fade keeps its hue. Interpolated
+        // naively in straight RGBA it travels through transparent BLACK and goes grey. The two
+        // halves are required to render identically, so - like the rgba-versus-hex rows - the
+        // honest reading is NO. 45 blocks write 124 of these.
+        new("gradient stop", "transparent vs the same colour at alpha 0",
+            new Doc(Div, ".p{width:200px;height:100px;background:"
+                         + "linear-gradient(90deg,#f0d3a6 0,transparent 100%);}"),
+            new Doc(Div, ".p{width:200px;height:100px;background:"
+                         + "linear-gradient(90deg,#f0d3a6 0,rgba(240,211,166,0) 100%);}")),
+
+        // ---- the constraint the whole compiler is built around, finally asked --------------------
+        // "One animation per element; a comma-separated list runs NEITHER" is rule one in
+        // AGENTS.md, it is why every tween touching an element is merged into a single
+        // @keyframes, and it was measured on 0.25 and never asked again. This matrix had no row
+        // for it - forty-eight rows about properties, and none about the thing the architecture
+        // bends around.
+        //
+        // A should-match pair, like the rgba-versus-hex rows: the two animations end where the
+        // static declaration already is, so `NO` means the list ran correctly and `yes` means it
+        // did not. Sampled at the end of both animations.
+        new("animation", "two, comma-separated, vs their end state",
+            new Doc(Div, "@keyframes slide{from{transform:translateX(0)}to{transform:translateX(80px)}}"
+                         + "@keyframes fade{from{opacity:1}to{opacity:0.25}}"
+                         + ".p{" + Box + "animation:slide 2s linear both,fade 2s linear both;}"),
+            new Doc(Div, ".p{" + Box + "transform:translateX(80px);opacity:0.25;}"),
+            At: 2),
+
+        // The same thing written as per-property lists, which is what the shorthand expands to.
+        new("animation", "two via longhand lists, vs their end state",
+            new Doc(Div, "@keyframes slide{from{transform:translateX(0)}to{transform:translateX(80px)}}"
+                         + "@keyframes fade{from{opacity:1}to{opacity:0.25}}"
+                         + ".p{" + Box + "animation-name:slide,fade;animation-duration:2s,2s;"
+                         + "animation-timing-function:linear,linear;animation-fill-mode:both,both;}"),
+            new Doc(Div, ".p{" + Box + "transform:translateX(80px);opacity:0.25;}"),
+            At: 2),
+
+        // The `hidden` attribute, which is display:none in every browser's UA stylesheet. The
+        // control is the same element WITHOUT the attribute, so a 'yes' means hidden hid it. One
+        // block writes a JSON data island this way, and the engine paints the JSON.
+        new("hidden", "attribute on a div with text",
+            new Doc("<div class=\"p\" hidden>Handgloves</div>", ".p{" + Ink + "}"),
+            new Doc("<div class=\"p\">Handgloves</div>", ".p{" + Ink + "}")),
+
         new("<svg> stroke", "stroke-dashoffset animated, draw-on",
             new Doc("<div class=\"p\"><svg width=\"200\" height=\"60\" xmlns=\"http://www.w3.org/2000/svg\">"
                     + "<line class=\"l\" x1=\"0\" y1=\"30\" x2=\"200\" y2=\"30\" stroke=\"#d9642a\" stroke-width=\"20\" "

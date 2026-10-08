@@ -86,21 +86,25 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.37.0, over the corpus pinned at
+On CupriFace 0.39.0, over the corpus pinned at
 [`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824)
 — see [docs/HARNESS.md](docs/HARNESS.md):
 
 | | |
 |---|---|
 | blocks scored | **168 of 172** |
-| **mean of content** | **47.2%** — the number to beat |
-| median | 49.7% |
-| mean of frame | 78.0% |
-| where it is wrong, off by | 28.1% of full scale |
-| blocks that render one still frame | 100 of 168 |
-| **blocks the engine paints almost nothing in** | **74 of 168** |
+| **mean of content** | **49.4%** — the number to beat |
+| median | 55.9% |
+| mean of content, over the 146 whose reference actually moves | 49.7%, median 58.8% |
+| blocks that are translatable at all | **81 of 172**, mean **62.6%** |
 
-Measured 7 October 2026, with the faces a block links from a font service *not* fetched, so it is
+**Quote the second mean, not the first, when comparing one change to another.** 22 blocks change
+under 1% of their pixels over the whole timeline, and a block that paints 0.03% of its frame reads
+40% on one run and 60% on the next while its refusals stay byte-identical — tracking a browser
+reference that is not deterministic. I credited a compiler change with twenty points on one of
+those before checking. See [docs/UNFIXABLE.md](docs/UNFIXABLE.md).
+
+Measured 8 October 2026, with the faces a block links from a font service *not* fetched, so it is
 comparable with every number before it. On the same pin, in order:
 
 | | mean of content | what changed |
@@ -113,15 +117,26 @@ comparable with every number before it. On the same pin, in order:
 | 0.37.0 | 46.0% | positioned radial gradients, every background layer, and `hidden` |
 | 0.37.0 | 46.2% | the compiler learning to read a list of targets — ours, not the engine's |
 | 0.37.0 | 46.3% | and carrying the 3D rotations and the stroke dash pair, refused since 0.35.0 |
-| **0.37.0** | **47.2%** | and reading an `if` whose test is a constant, which nothing had ever walked |
+| 0.37.0 | 47.2% | and reading an `if` whose test is a constant, which nothing had ever walked |
+| 0.37.0 | 47.2% | carrying `clipPath` as the numbers a shape is made of — 89 tweens, no pixels, see below |
+| 0.38.0 | 47.7% | a fade to `transparent` keeping its hue: `thread-message-stack` **9.4% to 79.9%** |
+| 0.38.0 | 47.8% | honouring a write THROUGH an object, which had been reading a stale literal |
+| **0.39.0** | **49.4%** | `filter` and `z-index`, the two this repository filed, and an overlapping tween taking over |
 
-Four engine releases in three days, seventeen issues raised from this repository's measurements
-and sixteen fixed. Two rows are the mechanism earning its keep. 0.35.0's six fixes moved the mean
-by **nothing**, because a regression arrived with them and the corpus run said so the same day.
-And 0.37.0 is the largest jump the corpus has had — `slack-notification-ad`, the motion canary and
-for months the worst-scoring one, went from **20.0% to 93.6%** — because the three gaps it closed
-were found by taking a single block apart rather than by counting properties. See
-[docs/CONFORMANCE.md](docs/CONFORMANCE.md).
+Six engine releases in four days, twenty-two issues raised from this repository's measurements and
+all of them fixed. Three rows are the mechanism earning its keep.
+
+0.35.0's six fixes moved the mean by **nothing**, because a regression arrived with them and the
+corpus run said so the same day. 0.37.0 is the largest jump the corpus has had —
+`slack-notification-ad`, the motion canary and for months the worst-scoring one, went from
+**20.0% to 93.6%** — because the three gaps it closed were found by taking a single block apart
+rather than by counting properties.
+
+And `clipPath` is the row that moved nothing, kept because a null result is a result: 89 tweens
+across 16 blocks were carried and the mean did not budge, because a half-second wipe in a
+five-second timeline is mostly sampled outside its own window and those blocks are held down by
+missing faces and canvas. Carrying motion and improving the picture are different claims. See
+[docs/CONFORMANCE.md](docs/CONFORMANCE.md) and [docs/UNFIXABLE.md](docs/UNFIXABLE.md).
 
 **The commit is part of the number.** The corpus is somebody else's work, fetched rather than
 vendored — and it used to be fetched from `main`, so every measurement took whatever upstream

@@ -128,7 +128,8 @@ harness samples five times.
 **A stagger — 14 refusals.** `stagger: 0.25` over a selector that matches N elements needs one
 animation per element with a different delay. **CupriFace 0.38.0 lifted the one-animation-per-element
 constraint (#284), so this is now expressible and has moved off this list.** It is work, not a
-wall. See [TRANSLATION.md](TRANSLATION.md).
+wall, and it is now the largest thing the lifted constraint actually buys — see
+[TRANSLATION.md](TRANSLATION.md), which records why exact per-tween eases turned out not to be.
 
 **A nested timeline added with `.add()` — 26 refusals.** Flattening a sub-timeline onto its
 parent's clock is tractable static analysis and belongs on the work list, not here.
@@ -193,20 +194,22 @@ That is the pattern worth keeping: a refusal names the engine's actual animatabl
 refusal that has gone stale is visible the moment the matrix is re-run against a new release. See
 [CONFORMANCE.md](CONFORMANCE.md).
 
-**An overlapping tween of the same property — 30 refusals across 6 blocks.**
+**An overlapping tween of the same property — was 36 refusals across 6 blocks, now 13 in one.**
 
-```
-'filterBlur' on '.frag-clau' at 2.289s overlaps a tween of the same property that is
-still running, and one element gets one animation
-```
+The refusal used to read "and one element gets one animation", which pointed at the constraint
+0.38.0 lifted and implied a second animation and an emitter rewrite. **It was the wrong reason.**
+GSAP does not overwrite by default: both tweens run and the timeline applies them in order every
+tick, so the later-added one is what the frame shows for as long as it lasts. So the question is
+only which one ends first — and once the refusal was made to say, counting answered it: 32 of the
+36 have the earlier tween ending first, most of them a one-millisecond sliver between back-to-back
+tweens. Those need no second animation, only the right stops, and they are carried now.
 
-The reason given is the constraint CupriFace 0.38.0 lifted, so this is work rather than a wall.
-And the translation is faithful rather than approximate: GSAP does not overwrite by default, so
-two concurrent tweens on one property both run and the later-applied one wins at each instant —
-which is exactly how a CSS animation list composes. Six blocks, and one of them is
-`blue-sweater-intro-video`, which fell 4.7 points when filter started being carried precisely
-because five of its blur tweens overlap and were dropped while the rest were kept. A partially
-carried blur sequence is worse than none.
+What is left is the four where the earlier tween **outlasts** the later one, so the picture goes
+back to it afterwards: before, during, after — three régimes, which one track of stops cannot say.
+13 refusals, all in `blue-sweater-intro-video`. That tail does need a second animation, scoped to
+the later tween's window with no fill so the primary shows through on both sides, and for a
+transform component it would have to write the whole transform during that window. One block, so
+it is written down here rather than done.
 
 **The engine's blur radius is right, and I checked rather than assumed.** When those two blocks
 fell, the obvious suspicion was that CupriFace used the blur radius as the Gaussian standard

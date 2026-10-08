@@ -77,17 +77,25 @@ emitter is not being rewritten for this.
 
 What the lifted constraint IS worth, in order:
 
-1. **Overlapping tweens of the same property** — 30 refusals across 6 blocks, every one reasoned
-   "one element gets one animation". And the translation would be faithful rather than
-   approximate: GSAP does not overwrite by default, so two concurrent tweens on one property both
-   run and the later-applied one wins at each instant, which is exactly how a CSS animation list
-   composes. `blue-sweater-intro-video` is one of the six and it FELL 4.7 points when `filter`
-   started being carried, precisely because five of its blur tweens overlap and were dropped while
-   the rest were kept.
-2. **Staggers** — 14 refusals. One animation per element with a different delay.
+1. **Staggers** — 14 refusals. One animation per element with a different delay. The largest
+   thing the lifted constraint actually buys, and still undone.
+2. **An overlapping tween the earlier one outlasts** — 13 refusals, all in one block. See below.
 
 Both are about carrying motion that is currently dropped, not about rendering carried motion more
-exactly. That is a different and smaller job than the rewrite, and it is the one worth doing.
+exactly. That is a different and smaller job than the rewrite.
+
+**And one that looked like it needed the lifted constraint and did not.** Two tweens of one
+property on one element were refused with the reason "one element gets one animation" — 36
+refusals across 6 blocks. GSAP does not overwrite by default, so both run and the later-added one
+is what the frame shows for as long as it lasts; the only question is which ends first. Making the
+refusal say which, and then counting, answered it: 32 of the 36 have the earlier tween ending
+first, most a one-millisecond sliver between back-to-back tweens. Those are carried now by
+truncating the earlier track and starting from the value it had actually reached — no second
+animation, just the right stops. What remains is the earlier tween OUTLASTING the later one, which
+is three régimes in one track and genuinely needs a second animation with no fill.
+
+The lesson is about the refusal rather than the feature: a reason that names a constraint sends
+the reader to lift the constraint. This one was carrying 32 cases that never needed it.
 
 ### Everything else
 

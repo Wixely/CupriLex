@@ -130,12 +130,40 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           dotnet pack compiler -c Release -p:Version="$version" -o dist
 
+      # One file at a time, from bash, and NOT through a quoted glob.
+      #
+      # The first tag this repository ever pushed got here with the package built and then failed:
+      # `dotnet nuget push "dist/*.nupkg"` reported `File does not exist (dist/*.nupkg)` a second
+      # after the pack step said `Successfully created package
+      # dist/CupriLex.Compiler.0.1.0-alpha.1.nupkg`. This job has no `shell:` of its own, so the
+      # step ran under pwsh, which passes a quoted argument to a native executable verbatim - and
+      # the glob reached NuGet as a literal path rather than as a pattern. The pack step above runs
+      # under bash, which is why that half worked and why the two disagreed.
+      #
+      # Expanding the glob in bash and pushing each file by name removes the question of who
+      # expands what. The loop also fails loudly on an empty dist/ rather than pushing nothing and
+      # passing, which is the failure mode this step would otherwise have had.
       - name: Publish
-        run: >
-          dotnet nuget push "dist/*.nupkg"
-          --source GitHub-Wixely-Packages
-          --api-key ${{ secrets.GITHUB_TOKEN }}
-          --skip-duplicate
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(dist/*.nupkg)
+
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::Pack produced no .nupkg, so there is nothing to publish."
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
+            echo "pushing $package"
+            dotnet nuget push "$package" \
+              --source GitHub-Wixely-Packages \
+              --api-key "$TOKEN" \
+              --skip-duplicate
+          done
 
   # ---------------------------------------------------------------------------------------------
   # Has upstream moved away from the pin?

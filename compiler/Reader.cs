@@ -553,9 +553,25 @@ internal sealed class Reader
             return true;
         }
 
-        // A list written into at an index: knowable in principle, and not worth the machinery for
-        // how rarely this corpus does it. The binding stops being trustworthy.
-        if (current is Value.List) return true;
+        // A list written into at an index, rebuilt the same way a bag is. Not worth skipping: the
+        // first version poisoned the root instead, and `CONFIG.series[1].color = blob2` then cost
+        // mk-line-graph every other key of its CONFIG - including the `showValues: true` that
+        // decides two branches three hundred lines later.
+        if (current is Value.List list)
+        {
+            if (!int.TryParse(keys[at], System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var index)
+                || index < 0 || index >= list.Of.Count)
+                return true;
+
+            if (!Rebuilt(list.Of[index], keys, at + 1, value, out var element)) return false;
+            if (element is null) return true;
+
+            var items = list.Of.ToList();
+            items[index] = element;
+            built = new Value.List(items);
+            return true;
+        }
 
         if (current is not Value.Bag bag) return false;
 

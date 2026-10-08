@@ -1374,4 +1374,100 @@ public class CompilerTests
         Assert.Contains("translateX(100px)", compiled.Motion.Css);
         Assert.Contains(compiled.Refusals, r => r.What.Contains("not a plain number", StringComparison.Ordinal));
     }
+
+    // ---- a write through a list ------------------------------------------------------------------
+    // The first write-through poisoned the root when the path went through a list, and
+    // `CONFIG.series[1].color = blob2` then cost mk-line-graph every other key of its CONFIG -
+    // including the `showValues: true` that decides two branches three hundred lines later.
+
+    [Fact]
+    public void A_write_through_a_list_leaves_its_siblings_readable()
+    {
+        var css = Css("""
+            const CONFIG = { series: [{ c: null }, { c: null }], show: true };
+            CONFIG.series[1].c = 5;
+            const tl = gsap.timeline();
+            if (CONFIG.show) { tl.to(".a", { x: 7, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains("translateX(7px)", css);
+    }
+
+    [Fact]
+    public void A_write_through_a_list_takes_effect()
+    {
+        var css = Css("""
+            const CONFIG = { series: [{ c: 1 }, { c: 2 }] };
+            CONFIG.series[1].c = 50;
+            const tl = gsap.timeline();
+            tl.to(".a", { x: CONFIG.series[1].c, duration: 1, ease: "none" });
+            """);
+
+        Assert.Contains("translateX(50px)", css);
+    }
+
+    // ---- comparison between two numbers ----------------------------------------------------------
+    // The same table already existed in Reader.Continues for loop tests only, which is how a
+    // counted loop was unrolled while `if (RACE_SECONDS > 0)` over the same arithmetic went unread.
+
+    [Theory]
+    [InlineData("4 > 1", true)]
+    [InlineData("0 > 1", false)]
+    [InlineData("2 >= 2", true)]
+    [InlineData("1 < 2", true)]
+    [InlineData("2 <= 1", false)]
+    [InlineData("3 == 3", true)]
+    [InlineData("3 != 3", false)]
+    public void A_comparison_between_two_numbers_is_decided(string test, bool taken)
+    {
+        var css = Css($$"""
+            const tl = gsap.timeline();
+            if ({{test}}) { tl.to(".a", { x: 7, duration: 1, ease: "none" }); }
+            else { tl.to(".a", { x: 3, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains(taken ? "translateX(7px)" : "translateX(3px)", css);
+    }
+
+    /// <summary>bar-chart-race's shape: a ternary over a comparison feeding a binding that a later
+    /// branch tests. Neither link folded before, so the whole race went unread.</summary>
+    [Fact]
+    public void A_ternary_over_a_comparison_folds_and_so_does_the_branch_that_reads_it()
+    {
+        var css = Css("""
+            const T = 4;
+            const RACE = T > 1 ? (T - 1) * 2 : 0;
+            const tl = gsap.timeline();
+            if (RACE > 0) { tl.to(".a", { x: RACE, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains("translateX(6px)", css);
+    }
+
+    [Fact]
+    public void The_length_of_a_stated_list_is_comparable()
+    {
+        var css = Css("""
+            const steps = [1, 2, 3];
+            const tl = gsap.timeline();
+            if (steps.length > 2) { tl.to(".a", { x: 7, duration: 1, ease: "none" }); }
+            """);
+
+        Assert.Contains("translateX(7px)", css);
+    }
+
+    /// <summary>The half that must not change, and the reason relational folding is guarded on both
+    /// sides being numbers: `null >= 0` is TRUE in JavaScript because relational operators coerce
+    /// where equality does not, and nothing here models that.</summary>
+    [Fact]
+    public void A_comparison_against_null_is_still_refused()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            if (null >= 0) { tl.to(".a", { x: 7, duration: 1 }); }
+            """);
+
+        Assert.Empty(compiled.Motion.Css);
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("could not decide", StringComparison.Ordinal));
+    }
 }

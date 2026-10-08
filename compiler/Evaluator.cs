@@ -285,6 +285,25 @@ internal static class Evaluator
             Acornima.Operator.Division => new Value.Number(x / y),
             Acornima.Operator.Remainder => new Value.Number(x % y),
             Acornima.Operator.Exponentiation => new Value.Number(Math.Pow(x, y)),
+
+            // Comparison between two values that are both NUMBERS, which is where the coercion
+            // that makes relational operators treacherous does not arise - a side that is null,
+            // undefined or an object fails the AsNumber guard above and never reaches here, so
+            // `null >= 0` stays refused rather than being answered wrongly. The same table already
+            // existed in Reader.Continues for loop tests only, which is how a counted loop was
+            // unrolled while `if (RACE_SECONDS > 0)` over the same arithmetic went unread, and
+            // `T > 1 ? (T - 1) * PERIOD : 0` resolved to nothing.
+            Acornima.Operator.LessThan => new Value.Number(x < y ? 1 : 0),
+            Acornima.Operator.LessThanOrEqual => new Value.Number(x <= y ? 1 : 0),
+            Acornima.Operator.GreaterThan => new Value.Number(x > y ? 1 : 0),
+            Acornima.Operator.GreaterThanOrEqual => new Value.Number(x >= y ? 1 : 0),
+
+            // Equality between two numbers. The null cases are decided above, before the guard.
+            Acornima.Operator.Equality or Acornima.Operator.StrictEquality
+                => new Value.Number(x == y ? 1 : 0),
+            Acornima.Operator.Inequality or Acornima.Operator.StrictInequality
+                => new Value.Number(x != y ? 1 : 0),
+
             _ => new Value.Unknown($"operator {node.Operator}"),
         };
     }

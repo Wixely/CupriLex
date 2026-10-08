@@ -172,6 +172,7 @@ internal sealed partial class Authored
     private Dictionary<string, Amount> Declared(IElement element)
     {
         string? transform = null;
+        string? clip = null;
 
         // The properties read straight through as a number, with the unit they carry. The stroke
         // pair is here for the draw-on idiom: `flowchart` authors `stroke-dasharray: 1000;
@@ -208,6 +209,7 @@ internal sealed partial class Authored
                 if (rule.Style.GetPropertyValue(names[i]) is { Length: > 0 } v) numbers[i] = v;
 
             if (rule.Style.GetPropertyValue("transform") is { Length: > 0 } t) transform = t;
+            if (rule.Style.GetPropertyValue("clip-path") is { Length: > 0 } c) clip = c;
         }
 
         // Then the stylesheet as written, for the properties the object model threw away.
@@ -217,6 +219,8 @@ internal sealed partial class Authored
 
             for (var i = 0; i < names.Length; i++)
                 if (numbers[i] is null && Inline(body, names[i]) is { } v) numbers[i] = v;
+
+            if (clip is null && Inline(body, "clip-path") is { } rawClip) clip = rawClip;
         }
 
         if (element.GetAttribute("style") is { Length: > 0 } inline)
@@ -225,6 +229,7 @@ internal sealed partial class Authored
                 if (Inline(inline, names[i]) is { } v) numbers[i] = v;
 
             if (Inline(inline, "transform") is { } t) transform = t;
+            if (Inline(inline, "clip-path") is { } c) clip = c;
         }
 
         var values = new Dictionary<string, Amount>();
@@ -233,6 +238,14 @@ internal sealed partial class Authored
             if (Number(numbers[i]) is { } amount) values[names[i]] = amount;
 
         if (transform is not null) Transform.Read(transform, values);
+
+        // The start of a wipe. A `.to({ clipPath: "inset(0 0% 0 0)" })` names only where the clip
+        // ends, and where it begins is in the stylesheet: us-map-hex authors
+        // `clip-path: inset(0 100% 0 0)` on its headline. Read nothing and the tween compiles
+        // from the unclipped resting state to the unclipped end state, every stop the same value,
+        // and the headline is fully visible from the first frame. The harness says so in as many
+        // words - "held at its end state rather than animated" - which is how this was found.
+        if (clip is not null) Clip.Read(clip, values);
 
         return values;
     }

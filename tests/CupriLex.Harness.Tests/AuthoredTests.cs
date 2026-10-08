@@ -254,4 +254,51 @@ public class AuthoredTests
 
         Assert.Equal(new Amount(1000, ""), authored.Value(".c#a, .c#b", "stroke-dashoffset"));
     }
+
+    // ---- the start of a wipe --------------------------------------------------------------------
+    // A `.to({ clipPath: ... })` names where the clip ends and the stylesheet says where it
+    // begins. Read nothing and every stop carries the same value, so the harness reports the
+    // element "held at its end state rather than animated" and the wipe is gone.
+
+    [Fact]
+    public void An_authored_clip_path_is_the_start_of_a_wipe()
+    {
+        var authored = Of(".c { clip-path: inset(0 100% 0 0); }", """<div class="c"></div>""");
+
+        Assert.Equal(new Amount(100, "%"), authored.Value(".c", "clipRight"));
+        Assert.Equal(new Amount(0, ""), authored.Value(".c", "clipTop"));
+    }
+
+    [Fact]
+    public void An_authored_polygon_is_read_point_by_point()
+    {
+        var authored = Of(".c { clip-path: polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%); }",
+            """<div class="c"></div>""");
+
+        Assert.Equal(new Amount(50, "%"), authored.Value(".c", "clipP1x"));
+        Assert.Equal(new Amount(100, "%"), authored.Value(".c", "clipP2y"));
+    }
+
+    /// <summary>The shape us-map-hex writes, end to end: the headline is authored clipped shut and
+    /// the timeline opens it. Before the cascade was read this compiled to one value repeated.</summary>
+    [Fact]
+    public void A_wipe_open_from_an_authored_clip_actually_moves()
+    {
+        var css = Css("""const tl = gsap.timeline(); tl.to(".a", { clipPath: "inset(0 0% 0 0)", duration: 1, ease: "none" });""",
+            """<div class="a" style="clip-path: inset(0 100% 0 0)"></div>""");
+
+        Assert.Contains("clip-path: inset(0 100% 0 0)", css);
+        Assert.Contains("clip-path: inset(0 0% 0 0)", css);
+    }
+
+    /// <summary>A shape the compiler cannot reduce leaves no start at all rather than half of one.
+    /// A circle read as an inset would clip the wrong thing from the first frame.</summary>
+    [Fact]
+    public void An_authored_shape_that_is_not_numbers_contributes_no_start()
+    {
+        var authored = Of(".c { clip-path: circle(30%); }", """<div class="c"></div>""");
+
+        Assert.Null(authored.Value(".c", "clipTop"));
+        Assert.Null(authored.Value(".c", "clipRight"));
+    }
 }

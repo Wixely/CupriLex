@@ -341,18 +341,56 @@ public class CompilerTests
         Assert.Contains(compiled.Refusals, r => r.What.Contains("more than", StringComparison.Ordinal));
     }
 
-    /// <summary>Two tweens of the same property overlapping cannot both be expressed in one
-    /// animation, and one element gets one animation.</summary>
+    /// <summary>
+    /// GSAP does not overwrite by default: both tweens run, and the timeline applies them in order
+    /// every tick, so the later-added one is what the frame shows for as long as it lasts. When the
+    /// earlier one ends first - 32 of the corpus's 36 overlaps - the later one simply takes over,
+    /// and one track of stops says that exactly.
+    /// </summary>
     [Fact]
-    public void Overlapping_tweens_of_one_property_refuse_the_second()
+    public void An_overlapping_tween_takes_over_from_where_the_earlier_one_had_reached()
     {
         var compiled = Compile("""
             const tl = gsap.timeline();
-            tl.to(".a", { x: 100, duration: 4 }, 0);
-            tl.to(".a", { x: 200, duration: 4 }, 1);
+            tl.to(".a", { x: 100, duration: 4, ease: "none" }, 0);
+            tl.to(".a", { x: 200, duration: 4, ease: "none" }, 1);
             """);
 
-        Assert.Contains(compiled.Refusals, r => r.What.Contains("overlaps", StringComparison.Ordinal));
+        Assert.DoesNotContain(compiled.Refusals, r => r.What.Contains("overlaps", StringComparison.Ordinal));
+
+        // The first tween reaches 25px at 1s on a five-second timeline, which is 20%, and the
+        // second travels from there rather than from 100.
+        Assert.Contains("20% { transform: translateX(25px); }", compiled.Motion.Css);
+        Assert.Contains("translateX(200px)", compiled.Motion.Css);
+    }
+
+    /// <summary>The case one track cannot say. If the earlier tween OUTLASTS the later one, the
+    /// picture goes back to it afterwards, and truncating the earlier track throws that tail
+    /// away.</summary>
+    [Fact]
+    public void An_overlapping_tween_the_earlier_one_outlasts_is_still_refused()
+    {
+        var compiled = Compile("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 8, ease: "none" }, 0);
+            tl.to(".a", { x: 200, duration: 1, ease: "none" }, 1);
+            """);
+
+        Assert.Contains(compiled.Refusals, r => r.What.Contains("OUTLASTS", StringComparison.Ordinal));
+    }
+
+    /// <summary>A .fromTo() states its own start, so it is not given the value the earlier tween had
+    /// reached - that would quietly replace a start the author wrote down.</summary>
+    [Fact]
+    public void An_overlapping_fromTo_keeps_the_start_it_states()
+    {
+        var css = Css("""
+            const tl = gsap.timeline();
+            tl.to(".a", { x: 100, duration: 4, ease: "none" }, 0);
+            tl.fromTo(".a", { x: 500 }, { x: 200, duration: 4, ease: "none" }, 1);
+            """);
+
+        Assert.Contains("translateX(500px)", css);
     }
 
     /// <summary>GSAP animating a plain object is a way to drive an onUpdate callback with numbers.

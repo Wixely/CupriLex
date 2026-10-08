@@ -241,16 +241,48 @@ internal static class Emit
                 var closing = new Amount(written.Value, target.Unit);
                 if (tween.Verb is "to" or "set") closing = target;
 
+                var stops = Track(tracks, tween.Selector, component);
+
                 if (busyUntil.TryGetValue(key, out var until) && tween.Start < until - Instant)
                 {
-                    refusals.Add(new Refusal(
-                        $"'{gsapName}' on '{tween.Selector}' at {Number(tween.Start)}s overlaps a "
-                        + "tween of the same property that is still running, and one element gets "
-                        + "one animation", tween.Line));
-                    continue;
+                    // GSAP does not overwrite by default. Both tweens run, and the timeline
+                    // applies them in order every tick, so the later-added one is what the frame
+                    // shows for as long as it lasts. Which one ends first is therefore what
+                    // decides whether a single track can say it.
+                    //
+                    // The earlier one ending first - 32 of the corpus's 36 overlaps, and most of
+                    // them a one-millisecond sliver between back-to-back tweens - means this tween
+                    // simply takes over: truncate the earlier one where this one starts, and start
+                    // from the value it had reached there, which is exactly what a .to() captures
+                    // when it first renders.
+                    if (until > tween.Start + tween.Span + Instant)
+                    {
+                        refusals.Add(new Refusal(
+                            $"'{gsapName}' on '{tween.Selector}' at {Number(tween.Start)}s overlaps "
+                            + $"a tween of the same property still running until {Number(until)}s, "
+                            + "and that one OUTLASTS it - so the picture goes back to the earlier "
+                            + "tween afterwards, which one track of stops cannot say", tween.Line));
+                        continue;
+                    }
+
+                    var (reached, unit) = At(stops, tween.Start);
+
+                    // Everything the earlier tween would have done from here on is overridden, and
+                    // the value it had reached is pinned a hair before this tween starts. A hair
+                    // before rather than at: Write puts this tween's own opening at `tween.Start`,
+                    // so a stop there too would be a duplicate time - and the stops are read in
+                    // order, which makes a duplicate shadow whatever comes after it. Pinned here,
+                    // a .to() continues smoothly and a .fromTo() snaps to the start it states,
+                    // which is what each of them does.
+                    stops.RemoveAll(stop => stop.Time > tween.Start - Instant);
+                    stops.Add(new Stop(tween.Start - Instant, reached, unit));
+
+                    // A .to() travels from where the element actually is, which is where the
+                    // earlier tween had got to. A .from() and a .fromTo() state their own start
+                    // and are left alone.
+                    if (tween.Verb is "to") opening = new Amount(reached, unit);
                 }
 
-                var stops = Track(tracks, tween.Selector, component);
                 Write(stops, tween, opening, closing);
 
                 current[key] = closing;

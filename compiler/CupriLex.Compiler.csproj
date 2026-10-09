@@ -16,7 +16,7 @@
     -->
     <IsPackable>true</IsPackable>
     <PackageId>CupriLex.Compiler</PackageId>
-    <Version>0.1.0-alpha.1</Version>
+    <Version>0.1.0-alpha.2</Version>
     <Authors>Wixely</Authors>
     <Description>Browser HTML in, CupriFace-safe HTML out, and a report of everything that could not come with it. Compiles GSAP timelines to static CSS keyframes, packages a composition as a .cutpkg, and lists every request a document would make off the machine before making any of them.</Description>
     <PackageTags>cupriface;cupricut;gsap;html;css;animation</PackageTags>

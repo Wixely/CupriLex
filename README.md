@@ -15,11 +15,11 @@ the line it was on.
 
 ## Getting it
 
-[**v0.1.0-alpha.1**](https://github.com/Wixely/CupriLex/releases/tag/v0.1.0-alpha.1) — the first
-tagged release. `CupriLex.Compiler` is on this organisation's GitHub Packages feed:
+[**v0.1.0-alpha.2**](https://github.com/Wixely/CupriLex/releases/tag/v0.1.0-alpha.2) — the latest
+release. `CupriLex.Compiler` is on this organisation's GitHub Packages feed:
 
 ```
-dotnet add package CupriLex.Compiler --version 0.1.0-alpha.1
+dotnet add package CupriLex.Compiler --version 0.1.0-alpha.2
 ```
 
 Restoring needs a GitHub Packages credential even though the package is public — see the comment
@@ -283,7 +283,7 @@ requires authentication even for a public NuGet package. See the comment in
 what it publishes and the `<Version>` in the csproj is what the tag should say.
 
 ```
-git tag -a v0.1.0-alpha.2 -m "..." && git push origin v0.1.0-alpha.2
+git tag -a v0.1.0-alpha.3 -m "..." && git push origin v0.1.0-alpha.3
 ```
 
 Watch the `publish` job rather than the run, and read its log rather than its conclusion. The

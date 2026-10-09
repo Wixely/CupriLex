@@ -74,7 +74,12 @@ internal static partial class Properties
         ["skewX"] = ("skewX", "deg"),
         ["skewY"] = ("skewY", "deg"),
         ["opacity"] = ("opacity", ""),
-        ["autoAlpha"] = ("opacity", ""),     // GSAP also flips visibility; the engine ignores that anyway
+        // GSAP's autoAlpha flips `visibility` as well as fading `opacity`. Mapped to opacity
+        // alone, which stays right for a better reason than the one this comment used to give.
+        // It said the engine ignored visibility; CupriFace has PAINTED it since 0.41.0, and the
+        // matrix says it still does not ANIMATE it - so visibility cannot carry the flip anyway,
+        // and opacity 0 is the same picture as visibility hidden for a render nobody clicks.
+        ["autoAlpha"] = ("opacity", ""),
         ["width"] = ("width", "px"),
         ["height"] = ("height", "px"),
         // clip-path, as the four edges of an inset(). The engine has animated it since 0.35.0

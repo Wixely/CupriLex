@@ -119,11 +119,23 @@ character. CSS has no property that animates text content. The `code-*` family a
 `vfx-text-cursor` are built on it. There is no rewrite; a cross-fade between two stacked elements
 could fake a *replacement* but not a typing effect, and it would need an element per frame.
 
-**`visibility` — 43 tweens across 34 blocks.** `autoAlpha` is already mapped to `opacity`, which
-is the part that matters. A bare `visibility` tween is usually a composition hiding its root at
-the very end (`tl.set("#root", { visibility: "hidden" }, DUR - 0.02)`). Carryable in principle;
-worth approximately nothing, because it affects the last twentieth of a second of a timeline the
-harness samples five times.
+**`visibility` — 53 tweens across 34 blocks, and the engine's position on it changed under this
+entry.** CupriFace has PAINTED `visibility: hidden` since 0.41.0 — correctly, including the hard
+part, where a `visibility: visible` child of a hidden parent comes back — but the matrix says it
+still does not ANIMATE it, so a change of it over time cannot be expressed. Measured rather than
+read: 0.41.0's own notes say it is supported in one section and "not supported by this engine at
+all" in another, and only the pixels settle that.
+
+Every one of the 53 is a `.set()`, and the shape decides the outcome. 17 are a composition hiding
+its root at the very end (`tl.set("#root", { visibility: "hidden" }, DUR - 0.02)`) and another 14
+hide a panel part-way through: those need the property to change at a time, which the engine will
+not do, so they stay refused. The handful at time zero are a static declaration and carryable —
+and worth nothing, because every one of them is paired with an `opacity` that already hides or
+shows the element.
+
+`autoAlpha` is mapped to `opacity` alone, which stays right for a better reason than before:
+opacity interpolates and visibility does not, and opacity 0 is the same picture as visibility
+hidden for a render nobody clicks.
 
 **A stagger — 14 refusals.** `stagger: 0.25` over a selector that matches N elements needs one
 animation per element with a different delay. **CupriFace 0.38.0 lifted the one-animation-per-element

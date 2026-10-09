@@ -1542,4 +1542,73 @@ public class CompilerTests
 
         Assert.Contains("translateX(100px)", css);
     }
+
+    // ---- an element the stylesheet hides and the timeline reveals --------------------------------
+    // CupriFace has painted `visibility: hidden` since 0.41.0 and still does not animate it, so an
+    // element hidden by CSS and revealed by the script would stay hidden for the whole render.
+    // Three corpus blocks do exactly that and all three FELL when the engine learned the property -
+    // ai-chat-reveal by 41 points - because the engine getting it right is what exposed the half
+    // this compiler was dropping.
+
+    private static string Page(string css, string script, string markup = """<div id="a"></div>""") =>
+        Translator.Of($"<html><head><style>{css}</style></head><body>{markup}"
+            + $"<script>{script}</script></body></html>").Motion.Css;
+
+    [Fact]
+    public void An_autoAlpha_reveal_writes_the_element_visible()
+    {
+        var css = Page("#a { visibility: hidden; opacity: 0; }",
+            """const tl = gsap.timeline(); tl.set("#a", { autoAlpha: 1 }, 2);""");
+
+        Assert.Contains("visibility: visible", css);
+    }
+
+    /// <summary>`autoAlpha` is GSAP's own pairing of the two, so a positive one is a reveal even
+    /// though nothing in the bag says "visibility".</summary>
+    [Fact]
+    public void A_bare_visibility_reveal_is_carried_even_with_no_other_property()
+    {
+        // Nothing here produces an Amount at all, so there is no tween - and the reveal is the
+        // whole point of the call.
+        var css = Page("#a { visibility: hidden; }",
+            """const tl = gsap.timeline(); tl.set("#a", { visibility: "visible" }, 2);""");
+
+        Assert.Contains("visibility: visible", css);
+    }
+
+    [Theory]
+    [InlineData("""tl.set("#a", { visibility: "hidden" }, 2);""")]
+    [InlineData("""tl.set("#a", { autoAlpha: 0 }, 2);""")]
+    public void A_hide_is_not_turned_into_a_reveal(string call)
+    {
+        // The half that must not change. The engine cannot animate the property either way, so
+        // claiming a hide as a reveal would show something the composition had put away.
+        var css = Page("#a { }", "const tl = gsap.timeline(); " + call);
+
+        Assert.DoesNotContain("visibility: visible", css);
+    }
+
+    /// <summary>The override goes LAST, so it outranks the author's own rule on source order -
+    /// which is what beats an id selector without inventing specificity.</summary>
+    [Fact]
+    public void The_reveal_is_written_after_the_animation_rules()
+    {
+        var css = Page("#a { visibility: hidden; opacity: 0; }",
+            """const tl = gsap.timeline(); tl.to("#a", { autoAlpha: 1, duration: 1 }, 0);""");
+
+        Assert.True(css.IndexOf("visibility: visible", StringComparison.Ordinal)
+            > css.IndexOf("animation:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_reveal_says_so_in_the_report()
+    {
+        var compiled = Translator.Of(
+            """<html><head><style>#a { visibility: hidden; opacity: 0; }</style></head>"""
+            + """<body><div id="a"></div><script>const tl = gsap.timeline();"""
+            + """ tl.set("#a", { autoAlpha: 1 }, 2);</script></body></html>""");
+
+        Assert.Contains(compiled.Refusals,
+            r => r.What.Contains("revealed by the timeline", StringComparison.Ordinal));
+    }
 }

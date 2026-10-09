@@ -537,6 +537,43 @@ public static class Cases
         // the gradient box was the element, a field of blobs once background-size tiled it (#273).
         // Written like the rgba-vs-hex rows: the two halves SHOULD paint the same, so the honest
         // reading is NO. 1px of a 200px line is 0.5%.
+        // ---- visibility, added in CupriFace 0.41.0 --------------------------------------------
+        // 53 refused tweens across 34 blocks, and the compiler's own property map carries a
+        // comment saying the engine ignores it. Asked here rather than read off the release notes,
+        // because 0.41.0's notes contradict themselves about it: the Added section says it is
+        // supported and a note in the Fixed section says it is "not supported by this engine at
+        // all". One of those is stale and only the pixels can say which.
+        Added("visibility", "hidden paints nothing", Box, "visibility:hidden;"),
+
+        // The whole difference from `display: none` is that the box KEEPS ITS SPACE, so the
+        // sibling after it must not move up. These two differ only in which property hides the
+        // first box, and if visibility is honoured properly they are different pictures.
+        new("visibility", "hidden keeps its space, unlike display:none",
+            new Doc("""<div class="a"></div><div class="b"></div>""",
+                ".a{width:120px;height:40px;background:#d9642a;visibility:hidden;}"
+                + ".b{width:120px;height:40px;background:#2a7fd9;}"),
+            new Doc("""<div class="a"></div><div class="b"></div>""",
+                ".a{width:120px;height:40px;background:#d9642a;display:none;}"
+                + ".b{width:120px;height:40px;background:#2a7fd9;}")),
+
+        // Inherited, and a child can take it back. This is the fact that makes the property
+        // awkward to implement - nothing may skip a hidden subtree - so it is the one most likely
+        // to be half-done, and a half-done answer here is a child that vanishes with its parent.
+        new("visibility", "visible child of a hidden parent is painted",
+            new Doc("""<div class="a"><div class="b"></div></div>""",
+                ".a{width:120px;height:80px;background:#d9642a;visibility:hidden;}"
+                + ".b{width:60px;height:40px;background:#2a7fd9;visibility:visible;}"),
+            new Doc("""<div class="a"><div class="b"></div></div>""",
+                ".a{width:120px;height:80px;background:#d9642a;visibility:hidden;}"
+                + ".b{width:60px;height:40px;background:#2a7fd9;}"),
+            ControlPaintsNothing: true),
+
+        // CSS animates visibility as a STEP, not a fade, which is the only sensible reading of a
+        // property with two values. A tween of it is therefore a snap, and what matters is only
+        // whether the snap happens at all.
+        Added("visibility", "animated, hidden to visible", Box, "visibility:hidden;",
+            animation: Moves("visibility", "hidden", "visible")),
+
         // ---- mixed units inside one inset(), which this compiler emits ------------------------
         // A clip edge with no tween rests at zero, and zero has no unit, so a wipe that moves the
         // LEFT edge emits `inset(0 0% 0 0)` at one keyframe and `inset(0 0% 0 0%)` at the next.

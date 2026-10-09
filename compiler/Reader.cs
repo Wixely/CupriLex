@@ -80,13 +80,27 @@ internal sealed class Reader
     /// name with one.</summary>
     private readonly HashSet<string> _timelines = ["gsap"];
 
+    /// <summary>
+    /// Selectors the timeline makes VISIBLE at some point, by <c>visibility</c> or by a positive
+    /// <c>autoAlpha</c>.
+    ///
+    /// <para>CupriFace has painted <c>visibility: hidden</c> since 0.41.0 and still does not
+    /// animate it, so an element the stylesheet hides and the script reveals would stay hidden for
+    /// the whole render. Three blocks do exactly that and all three FELL when the engine learned
+    /// the property - ai-chat-reveal by 41 points - because the engine getting it right is what
+    /// exposed the half this compiler was dropping. <see cref="Emit"/> turns these into a static
+    /// <c>visibility: visible</c>.</para>
+    /// </summary>
+    private readonly HashSet<string> _revealed = [];
+
     /// <summary>Callback bodies to walk once the synchronous pass is done, in the order they would
     /// run. See <see cref="Defer"/>.</summary>
     private readonly List<(Value.Routine Body, Scope Scope)> _deferred = [];
     private int _scriptLine;
     private string _scriptSource = "";
 
-    public static (IReadOnlyList<RawTween> Tweens, IReadOnlyList<Refusal> Refusals) Read(string html)
+    public static (IReadOnlyList<RawTween> Tweens, IReadOnlyList<Refusal> Refusals,
+        IReadOnlyCollection<string> Revealed) Read(string html)
     {
         var reader = new Reader();
         var scripts = ScriptReader.Of(html);
@@ -106,7 +120,7 @@ internal sealed class Reader
             reader.Unreached(script.Tree);
         }
 
-        return (reader._tweens, reader._refusals);
+        return (reader._tweens, reader._refusals, reader._revealed);
     }
 
     // ---- statements ---------------------------------------------------------------------------
@@ -1049,6 +1063,10 @@ internal sealed class Reader
         var from = fromValues is null ? null : Amounts(fromValues, selector, verb, line).Amounts;
         _refusals.AddRange(refusedTo);
 
+        // Before the early return, because a `.set(el, { visibility: "visible" })` with nothing
+        // else in it produces no Amount and no tween, and the reveal is the whole point of it.
+        if (Reveals(values)) foreach (var target in selectors) _revealed.Add(target);
+
         if (to.Count == 0 && (from is null || from.Count == 0)) return;
 
         // One tween per target. The engine gives every element its own animation anyway, so a
@@ -1058,6 +1076,26 @@ internal sealed class Reader
             _tweens.Add(new RawTween(
                 target, verb, (clock?.Offset ?? 0) + start, duration, ease, to, from, line,
                 repeats, yoyo));
+    }
+
+    /// <summary>
+    /// Whether a tween's values make the element visible.
+    ///
+    /// <para><c>autoAlpha</c> is GSAP's own pairing of the two - it fades <c>opacity</c> and flips
+    /// <c>visibility</c> to match - so a positive one is a reveal even though nothing in the bag
+    /// says "visibility". Zero or <c>hidden</c> is a HIDE and deliberately not recorded: the engine
+    /// cannot animate the property, so a hide part-way through is not expressible either way, and
+    /// claiming it as a reveal would show something the composition had put away.</para>
+    /// </summary>
+    private static bool Reveals(Value.Bag values)
+    {
+        if (values.Of.TryGetValue("visibility", out var stated)
+            && stated.AsText is { } text
+            && text.Trim().Equals("visible", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return values.Of.TryGetValue("autoAlpha", out var alpha)
+            && alpha.AsNumber is { } opacity && opacity > 0;
     }
 
     /// <summary>

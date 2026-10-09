@@ -69,14 +69,17 @@ internal static class Emit
     };
 
     public static Sheet Sheet(IReadOnlyList<RawTween> tweens, IReadOnlyList<Refusal> carried,
-        Authored? authored = null)
+        Authored? authored = null, IReadOnlyCollection<string>? revealed = null)
     {
         var refusals = carried.ToList();
         authored ??= Authored.None;
         var tracks = Thread(tweens, refusals, authored);
         Carry(tracks, authored);
 
-        if (tracks.Count == 0) return new Sheet("", 0, 0, refusals, [], 0);
+        var reveals = Reveals(revealed, refusals);
+
+        if (tracks.Count == 0)
+            return new Sheet(reveals, 0, 0, refusals, [], 0);
 
         var seconds = tracks.Values
             .SelectMany(byProperty => byProperty.Values)
@@ -166,8 +169,43 @@ internal static class Emit
             if (!still) animated.Add(selector);
         }
 
-        return new Sheet(css.Append(animations).ToString(), seconds, animated.Count,
+        return new Sheet(css.Append(animations).Append(reveals).ToString(), seconds, animated.Count,
             refusals, emitted, animated.Count == emitted.Count ? 0 : emitted.Count - animated.Count);
+    }
+
+    /// <summary>
+    /// A static <c>visibility: visible</c> for every element the timeline reveals.
+    ///
+    /// <para>The engine paints <c>visibility: hidden</c> and does not animate it, which leaves two
+    /// readings of an element the stylesheet hides and the script reveals: hidden for the whole
+    /// render, or visible for the whole render. <b>Visible is the honest one.</b> Hidden loses the
+    /// content outright, and in every corpus block that does this the reveal is an
+    /// <c>autoAlpha</c> paired with an <c>opacity: 0</c> that this compiler DOES carry - so
+    /// opacity keeps the element invisible until its own tween, and the timing survives intact.
+    /// Where there is no opacity beside it the element appears early, which the refusal says.</para>
+    ///
+    /// <para>Written unconditionally rather than only for an element the cascade hides, because
+    /// `visibility: visible` on an element nobody hid is a no-op and asking the cascade would buy
+    /// nothing but a second way to be wrong. It goes last so it outranks the author's own rule on
+    /// source order, which is what beats an id selector without inventing specificity.</para>
+    /// </summary>
+    private static string Reveals(IReadOnlyCollection<string>? revealed, List<Refusal> refusals)
+    {
+        if (revealed is null || revealed.Count == 0) return "";
+
+        var css = new StringBuilder();
+
+        foreach (var selector in revealed)
+            css.Append($"{selector} {{ visibility: visible; }}\n");
+
+        refusals.Add(new Refusal(
+            $"{revealed.Count} element(s) are revealed by the timeline with `visibility` or "
+            + "`autoAlpha`, and the engine paints that property without animating it - so they are "
+            + "written visible for the whole render rather than hidden for all of it. Where an "
+            + "`opacity` tween runs beside the reveal, which is every case in this corpus, the "
+            + "timing is unaffected; where there is none, the element appears early"));
+
+        return css.ToString();
     }
 
     // ---- threading ----------------------------------------------------------------------------

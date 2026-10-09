@@ -30,13 +30,13 @@ public static class Translator
         var inlined = Inline(document);
 
         var prepared = document.ToHtml();
-        var (tweens, readRefusals) = Reader.Read(prepared);
+        var (tweens, readRefusals, revealed) = Reader.Read(prepared);
 
         // After the templates are inlined and before anything is emitted. Both halves of that
         // matter: thirteen blocks keep their whole composition, stylesheet included, inside a
         // <template>, and an element that is not in the document yet has no authored value to
         // read.
-        var sheet = Emit.Sheet(tweens, readRefusals, Authored.Of(prepared));
+        var sheet = Emit.Sheet(tweens, readRefusals, Authored.Of(prepared), revealed);
 
         var output = Parser.ParseDocument(prepared);
         var refusals = sheet.Refusals.ToList();

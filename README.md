@@ -117,7 +117,7 @@ markup for a JavaScript-free renderer to draw, and the compiler says so rather t
 
 ### The numbers
 
-On CupriFace 0.39.0, over the corpus pinned at
+On CupriFace 0.40.0, over the corpus pinned at
 [`c9b3d9c9`](https://github.com/heygen-com/hyperframes/commit/c9b3d9c9628d4c51696147ecd2fd881080e72824)
 — see [docs/HARNESS.md](docs/HARNESS.md):
 
@@ -164,10 +164,13 @@ comparable with every number before it. On the same pin, in order:
 | 0.37.0 | 47.2% | carrying `clipPath` as the numbers a shape is made of — 89 tweens, no pixels, see below |
 | 0.38.0 | 47.7% | a fade to `transparent` keeping its hue: `thread-message-stack` **9.4% to 79.9%** |
 | 0.38.0 | 47.8% | honouring a write THROUGH an object, which had been reading a stale literal |
-| **0.39.0** | **49.4%** | `filter` and `z-index`, the two this repository filed, and an overlapping tween taking over |
+| 0.39.0 | 49.4% | `filter` and `z-index`, the two this repository filed, and an overlapping tween taking over |
+| **0.40.0** | **49.4%** | two new CupriDoctor checks and nothing else; the matrix diff is empty and no block moved |
 
-Six engine releases in four days, twenty-two issues raised from this repository's measurements and
-all of them fixed. Three rows are the mechanism earning its keep.
+Seven engine releases in five days, twenty-two issues raised from this repository's measurements
+and all of them fixed. Three rows are the mechanism earning its keep, and the last row is the
+mechanism being worth running anyway: a release that changes no rendering should move nothing, and
+proving that costs one matrix run and one corpus run.
 
 0.35.0's six fixes moved the mean by **nothing**, because a regression arrived with them and the
 corpus run said so the same day. 0.37.0 is the largest jump the corpus has had —

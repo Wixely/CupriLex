@@ -246,15 +246,18 @@ Four verbs — `to`, `set`, `fromTo`, `from` — are 2618 of the calls. That is 
 
 - **Not a GSAP implementation.** A bounded subset, compiled ahead of time. Anything outside it is
   refused and named, never approximated.
-- **Not a runtime dependency.** A composition is translated **once**, into a `.cutpkg` that is
-  already self-contained — one zip with the markup, the assets, the fonts and the report inside.
-  A project that has been imported is just a project; nothing depends on this tool at render time.
-  See [docs/PACKAGE.md](docs/PACKAGE.md), and [docs/EXTERNAL.md](docs/EXTERNAL.md) for what a
-  composition would fetch off the machine and who gets asked.
+- **Not a runtime dependency, and not an import step you repeat.** A composition is translated
+  **once**, into a self-contained project — the markup, the assets, the fonts and the report in one
+  file. A project that has been imported is just a project; nothing consults this tool when one is
+  rendered, copied or committed. See [docs/PACKAGE.md](docs/PACKAGE.md), and
+  [docs/EXTERNAL.md](docs/EXTERNAL.md) for what a composition would fetch off the machine and who
+  gets asked.
 
-  The translation is also a library, for a host that wants to do this at run time:
-  `CupriLex.Compiler`, alpha — see [Getting it](#getting-it) above and
-  [docs/PACKAGING.md](docs/PACKAGING.md).
+  **Who writes that file depends on who is importing.** CupriCut takes `CupriLex.Compiler` as a
+  package and writes its own `CutProject` or `.cutpkg`, gathering the assets and fetching the faces
+  on its side with its own types — which is the intended shape, since the format is its own. The
+  harness here writes `.cutpkg` directly, over the pinned corpus, as the instrument that produces
+  the counts in these documents. Either way the translation happens once.
 - **Not a general HTML-to-CupriFace converter**, though it may become one. The corpus is the
   target, and the corpus is what keeps the scope honest.
 

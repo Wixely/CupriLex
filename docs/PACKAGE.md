@@ -169,7 +169,16 @@ font that every browser reads, an unfiled CupriFace defect.
 
 ## The schema is copied, not referenced
 
-`project.json` is written from a small DTO in `compiler/Package.cs` rather than from CupriCut's
-`CutProject`. A project reference would make the compiler need a renderer in order to build, which
-is a worse trade than the drift it would prevent. The cost is real, so the field names are asserted
-one at a time in `PackageTests` against a package that is written and read back.
+`project.json` is written from a small DTO in `harness/Package.cs` rather than from CupriCut's
+`CutProject`. A project reference would make this repository need a renderer in order to build,
+which is a worse trade than the drift it would prevent. The cost is real, so the field names are
+asserted one at a time in `PackageTests` against a package that is written and read back.
+
+**This writer is no longer part of the published library, and the copy matters less than it did.**
+It lived in `compiler/` while nothing downstream could gather a translation's assets, so handing
+over a finished file was the only way to hand over the faces and images with it. CupriCut gathers
+and writes its own now, with its own `CutProject` and `CutPackage` types, so what ships to a
+consumer is the translation and nothing else. What remains here is an instrument: `--package` is
+how the counts in this document and in [UNFIXABLE.md](UNFIXABLE.md) are re-derived, over a pinned
+corpus, by hand. A hand-copied schema inside an instrument is a convenience. Inside a published API
+for somebody else's format it was a liability.

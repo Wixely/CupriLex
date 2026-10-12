@@ -1,7 +1,9 @@
 ﻿using System.Globalization;
 using System.Text;
 
-namespace CupriLex.Compiler;
+using CupriLex.Compiler;
+
+namespace CupriLex.Harness;
 
 /// <summary>
 /// The report, which is a deliverable rather than a log.

@@ -5,7 +5,9 @@ using System.Text.Json.Serialization;
 using AngleSharp;
 using AngleSharp.Html.Parser;
 
-namespace CupriLex.Compiler;
+using CupriLex.Compiler;
+
+namespace CupriLex.Harness;
 
 /// <summary>What a composition is, beyond its markup: the things a renderer has to be told.</summary>
 /// <param name="Duration">What the block declares. The package may run longer - see

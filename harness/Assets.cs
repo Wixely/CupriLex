@@ -2,7 +2,9 @@
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 
-namespace CupriLex.Compiler;
+using CupriLex.Compiler;
+
+namespace CupriLex.Harness;
 
 /// <summary>One file the document refers to, and the name it refers to it by.</summary>
 public sealed record Asset(string Key, string Source, byte[] Bytes);

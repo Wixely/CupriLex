@@ -157,8 +157,16 @@ public static class Translator
     ///
     /// <para>A browser resolves <c>assets/logo.png</c> against the document's location.
     /// <c>CupriDocument.Load</c> is given a string, which has no location, so the same reference
-    /// resolves against the working directory and finds nothing. Milestone 5 will embed these as
-    /// bytes in a <c>.cutpkg</c>; until then they are made absolute.</para>
+    /// resolves against the working directory and finds nothing. Making them absolute is what lets
+    /// a translation render <i>here</i>, immediately, with no packaging step.</para>
+    ///
+    /// <para><b>Which is why a caller that is about to build a portable file should pass no
+    /// directory at all.</b> An absolute <c>file:///</c> path is correct for a render about to
+    /// happen on this machine and wrong for anything meant to be copied: CupriCut shipped a
+    /// <c>translate</c> that passed one, and produced projects carrying
+    /// <c>src="file:///C:/Users/.../logo.png"</c> and no assets - perfect on one computer, in one
+    /// directory, and broken everywhere else. Left relative, the references stay as the author
+    /// wrote them and the consumer inlines them under those same names.</para>
     /// </summary>
     private static void Rebase(IHtmlDocument document, string directory)
     {

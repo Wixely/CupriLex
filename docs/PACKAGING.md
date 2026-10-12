@@ -1,7 +1,7 @@
 # The library: `CupriLex.Compiler`
 
 ```
-dotnet add package CupriLex.Compiler --version 0.1.0-alpha.1 --prerelease
+dotnet add package CupriLex.Compiler --version 0.1.0-alpha.2
 ```
 
 From the same GitHub feed CupriCut already authenticates to for CupriFace. **Alpha**, and the
@@ -12,22 +12,30 @@ still change.
 
 ## What is in it
 
-The whole translation, and nothing that walks a corpus. 24 public types:
+The whole translation, and nothing that walks a corpus. 19 public types:
 
 | | |
 |---|---|
 | **translate** | `Translator.Of` → `Translated` (`Html`, `Motion` as a `Sheet`, `Refusals`) |
 | **ask before fetching** | `External.Of` → `Request`, `Fetches`; `IConsent` and `Consent`; `IFetch`, `Http`, `Fetched`; `WebFonts.GatherAsync` → `Gathered`, `Web` |
-| **package** | `Package.Write`, `Composition`, `Packaged`, `Asset`, `Collected` |
 | **decide** | `Fallbacks`, `Dropped`, `Unresolved`, `Typeface` |
 | **report** | `Refusal` |
+
+### What a consumer does with the result
+
+It builds its own project file. CupriCut's `translate` reads a document, gathers the assets beside
+it, fetches the faces it is allowed to fetch, and writes a `CutProject` or a `.cutpkg` **with its
+own types** — see `CupriCut/Services/Translate.cs`. That is the intended shape: this library hands
+over markup, a stylesheet and a list of refusals, and the repository that owns the format writes the
+format.
 
 ## What is deliberately not in it
 
 `Reader`, `Emit`, `Evaluator`, `Scope`, `Clock`, `RawTween`, `Value`, `Properties`, `Ease`,
-`ScriptReader`, `Authored`, `Transform`, `Faces`, `Images`, `Reporting`, `Assets`, `Motion` — 27
-types in all — are `internal`. They are how a translation is *produced*, and none of them is a
-question a consumer asks.
+`ScriptReader`, `Authored`, `Transform`, `Faces`, `Images` and `Motion` are `internal`. They are
+how a translation is *produced*, and none of them is a question a consumer asks. `Assets` and
+`Reporting` were on this list too and are no longer in the library at all — they moved to
+`harness/` with the `.cutpkg` writer they served.
 
 This was done **before** the first alpha rather than after, on purpose. Every one of them was
 public while this repository was the only thing compiling against it, and an alpha that shipped
@@ -46,7 +54,7 @@ reports are *about* the internals by definition.
 |---|---|---|
 | `compiler/` | `CupriLex.Compiler` | the library. **The only thing published** |
 | `cli/` | `cuprilex` | `shapes`, `reach`, `translate`, `faces` — the surveys this repository steers by |
-| `harness/` | | the comparison harness, and the packager's command line |
+| `harness/` | | the comparison harness, **and the `.cutpkg` writer** — see below |
 | `conformance/` | | what the engine actually supports, measured by rendering |
 
 `cli/` exists because of the split. `Program`, `Shapes`, `Reach` and `CorpusPath` used to sit in
@@ -54,6 +62,19 @@ the library and would have shipped inside it — a corpus-directory walk in some
 
 The harness now carries its own copy of that walk. Twelve lines duplicated is a smaller cost than
 one published type nobody wanted.
+
+**The `.cutpkg` writer moved there for the same reason, and later.** `Package`, `Composition`,
+`Packaged`, `Asset` and `Collected` were public, along with the `Assets` and `Reporting` internals
+behind them. They existed because a translation had to be handed over *with its assets attached* —
+the faces fetched from a font service, the images beside the block — and at the time nothing
+downstream could do that gathering, so this repository did it and wrote the file.
+
+`.cutpkg` is **CupriCut's format**, and CupriCut now gathers and writes it itself. So the writer had
+become a published API, for somebody else's schema, that no consumer called: exactly the shape the
+split above exists to prevent. It is still here and still used — `--package` is how the counts in
+[UNFIXABLE.md](UNFIXABLE.md) and [PACKAGE.md](PACKAGE.md) are re-derived — it is simply no longer
+part of what a consumer installs. Five public types fewer, and the hand-copied schema is now plainly
+an instrument's convenience rather than a contract.
 
 ---
 

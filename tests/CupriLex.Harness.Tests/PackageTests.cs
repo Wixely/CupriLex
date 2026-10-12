@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using CupriLex.Compiler;
+using CupriLex.Harness;
 using Xunit;
 
 namespace CupriLex.Harness.Tests;

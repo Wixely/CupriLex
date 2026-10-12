@@ -6,7 +6,10 @@ A composition written for a browser fetches things. A font service, usually: 64 
 family is named and nothing answers it, and a renderer with a strict font policy refuses to draw at
 all.
 
-CupriLex can fetch them and carry them inside the `.cutpkg`. **It never does so on its own.**
+CupriLex can fetch them. **It never does so on its own**, and it never decides where they end up:
+`WebFonts.GatherAsync` hands the faces back as bytes and the caller carries them. The harness here
+writes them into a `.cutpkg`; CupriCut inlines them into its own project, behind its own
+`Cut:AllowWebFonts`, which is off by default for the same reason this is.
 
 ---
 
